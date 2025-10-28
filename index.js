@@ -1,17 +1,12 @@
 const express = require('express');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
-const jwt =require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
+const path = require('path'); // Statik dosyalar için
 
 const app = express();
-app.use(express.json());
-
-// YENİ EKLENDİ: Statik dosyaların (HTML, CSS, JS) dağıtımını etkinleştirir.
-const path = require('path'); // Node.js'in standart dosya yolu kütüphanesi
-app.use(express.static(path.join(__dirname, 'public')));
-// Kullanıcı siteye girdiğinde 'public' klasörüne yönlendirilecek
-
-// ... aşağıdaki authenticateToken, authorizeAdmin vb. devam edecek.
+app.use(express.json()); 
+app.use(express.static(path.join(__dirname, 'public'))); // Statik dosyaları dağıt
 
 // --- VERİTABANI AYARLARI ---
 const pool = new Pool({
@@ -21,14 +16,14 @@ const pool = new Pool({
   }
 });
 
-// --- TABLO OLUŞTURMA FONKSİYONLARI ---
+// --- TABLO OLUŞTURMA FONKSİYONU ---
 const createTables = async () => {
   const usersTableQuery = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
-      role VARCHAR(50) DEFAULT 'user' NOT NULL, -- 'user' veya 'admin'
+      role VARCHAR(50) DEFAULT 'user' NOT NULL, 
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
@@ -38,35 +33,39 @@ const createTables = async () => {
       title VARCHAR(255) NOT NULL,
       content TEXT NOT NULL,
       author_id INTEGER NOT NULL REFERENCES users(id),
-      status VARCHAR(50) DEFAULT 'pending' NOT NULL, -- pending, approved, rejected
+      status VARCHAR(50) DEFAULT 'pending' NOT NULL, 
+      category VARCHAR(50) DEFAULT 'Genel' NOT NULL, 
+      is_pinned BOOLEAN DEFAULT FALSE NOT NULL,     
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
   try {
     await pool.query(usersTableQuery);
-    await pool.query(postsTableQuery);
+    await pool.query(postsTableQuery); 
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
   } catch (err) {
     console.error("Tablolar oluşturulurken hata:", err);
   }
 };
 
+
 // --- MIDDLEWARE'LER ---
 
 // 1. Authentication: Kullanıcı giriş yapmış mı?
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (token == null) return res.sendStatus(401);
+    // Token, "Bearer TOKEN_STRING_HERE" formatında gelir
+    const token = authHeader && authHeader.split(' ')[1]; 
+    if (token == null) return res.sendStatus(401); // Token yoksa yetkisiz
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
+        if (err) return res.sendStatus(403); // Token geçersizse yasaklı
+        req.user = user; // Token'dan gelen kullanıcı bilgisini (id, role) isteğe ekle
         next();
     });
 };
 
-// 2. YENİ EKLENDİ - Authorization: Kullanıcı admin mi?
+// 2. Authorization: Kullanıcı admin mi?
 const authorizeAdmin = (req, res, next) => {
     if (req.user.role !== 'admin') {
         return res.status(403).json({ message: 'Bu işlem için yetkiniz yok.' });
@@ -78,39 +77,31 @@ const authorizeAdmin = (req, res, next) => {
 // --- API ROTALARI ---
 
 // KULLANICI ROTALARI
-app.post('/register', async (req, res) => { /* ... önceki kodun aynısı ... */ 
+app.post('/register', async (req, res) => {
     try {
         const { email, password } = req.body;
-        if (!email || !password) {
-          return res.status(400).json({ message: 'Email ve şifre alanları zorunludur.' });
-        }
+        if (!email || !password) return res.status(400).json({ message: 'Email ve şifre zorunludur.' });
         const userExists = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (userExists.rows.length > 0) {
-          return res.status(409).json({ message: 'Bu email adresi zaten kullanılıyor.' });
-        }
+        if (userExists.rows.length > 0) return res.status(409).json({ message: 'Bu email adresi zaten kullanılıyor.' });
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
         const newUser = await pool.query(
           'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email, role',
           [email, hashedPassword]
         );
-        res.status(201).json({ message: 'Kullanıcı başarıyla oluşturuldu.', user: newUser.rows[0] });
+        res.status(201).json({ message: 'Kullanıcı oluşturuldu.', user: newUser.rows[0] });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
-app.post('/login', async (req, res) => { /* ... önceki kodun aynısı ... */ 
+app.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (user.rows.length === 0) {
-            return res.status(400).json({ message: 'Geçersiz email veya şifre.' });
-        }
+        if (user.rows.length === 0) return res.status(400).json({ message: 'Hatalı giriş.' });
         const validPassword = await bcrypt.compare(password, user.rows[0].password);
-        if (!validPassword) {
-            return res.status(400).json({ message: 'Geçersiz email veya şifre.' });
-        }
+        if (!validPassword) return res.status(400).json({ message: 'Hatalı giriş.' });
         const token = jwt.sign(
             { id: user.rows[0].id, role: user.rows[0].role },
             process.env.JWT_SECRET,
@@ -124,17 +115,23 @@ app.post('/login', async (req, res) => { /* ... önceki kodun aynısı ... */
 });
 
 // PAYLAŞIM ROTALARI
-app.post('/posts', authenticateToken, async (req, res) => { /* ... önceki kodun aynısı ... */ 
+
+// 1. GÖNDERME - Category eklendi
+app.post('/posts', authenticateToken, async (req, res) => { 
     try {
-        const { title, content } = req.body;
-        const authorId = req.user.id;
+        const { title, content, category } = req.body; 
+        const authorId = req.user.id; 
+
         if (!title || !content) {
-            return res.status(400).json({ message: 'Başlık ve içerik alanları zorunludur.' });
+            return res.status(400).json({ message: 'Başlık ve içerik zorunludur.' });
         }
+        const postCategory = category || 'Genel'; 
+
         const newPost = await pool.query(
-            'INSERT INTO posts (title, content, author_id) VALUES ($1, $2, $3) RETURNING *',
-            [title, content, authorId]
+            'INSERT INTO posts (title, content, category, author_id) VALUES ($1, $2, $3, $4) RETURNING *',
+            [title, content, postCategory, authorId]
         );
+
         res.status(201).json({ 
             message: 'Paylaşımınız onaya gönderildi. Teşekkürler!', 
             post: newPost.rows[0] 
@@ -145,11 +142,38 @@ app.post('/posts', authenticateToken, async (req, res) => { /* ... önceki kodun
     }
 });
 
+// 2. LİSTELEME - Sabitleme ve kategoriye göre sıralama eklendi
+app.get('/api/posts', async (req, res) => {
+    try {
+        const approvedPosts = await pool.query(`
+            SELECT 
+                p.id, 
+                p.title, 
+                p.content, 
+                p.category,           
+                p.is_pinned,          
+                p.created_at, 
+                u.email AS author_email 
+            FROM posts p
+            JOIN users u ON p.author_id = u.id
+            WHERE p.status = 'approved' 
+            ORDER BY 
+                p.is_pinned DESC,  
+                p.created_at DESC; 
+        `);
+        
+        res.json(approvedPosts.rows);
 
-// --- YENİ EKLENDİ: ADMIN ROTALARI ---
-// Bu rotalara erişmek için hem giriş yapmış (authenticate) hem de admin (authorize) olmak gerekir.
+    } catch (err) {
+        console.error("Onaylanmış paylaşımları getirirken hata:", err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
 
-// 1. Onay bekleyen tüm paylaşımları getir
+
+// ADMIN ROTALARI
+
+// 1. Onay bekleyenleri getir
 app.get('/admin/pending-posts', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const pendingPosts = await pool.query("SELECT * FROM posts WHERE status = 'pending' ORDER BY created_at DESC");
@@ -160,28 +184,50 @@ app.get('/admin/pending-posts', [authenticateToken, authorizeAdmin], async (req,
     }
 });
 
-// 2. Bir paylaşımı onayla veya reddet
+// 2. PAYLAŞIM GÜNCELLEME (Onay/Reddet/Sabitleme/Kategori)
 app.put('/admin/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
-        const { id } = req.params; // URL'den gelen post ID'si
-        const { action } = req.body; // 'approve' veya 'reject'
+        const { id } = req.params; 
+        const { action, category, is_pinned } = req.body; 
+        
+        const fields = [];
+        const values = [];
+        let paramIndex = 1;
 
-        if (!['approve', 'reject'].includes(action)) {
-            return res.status(400).json({ message: "Geçersiz işlem. Sadece 'approve' veya 'reject' kullanılabilir." });
+        if (action) {
+            if (!['approve', 'reject'].includes(action)) {
+                return res.status(400).json({ message: "Geçersiz işlem. Sadece 'approve' veya 'reject' kullanılabilir." });
+            }
+            const newStatus = action === 'approve' ? 'approved' : 'rejected';
+            fields.push(`status = $${paramIndex++}`);
+            values.push(newStatus);
         }
 
-        const newStatus = action === 'approve' ? 'approved' : 'rejected';
+        if (category !== undefined) {
+            fields.push(`category = $${paramIndex++}`);
+            values.push(category);
+        }
+        
+        if (typeof is_pinned === 'boolean') { // Sadece boolean ise kabul et
+            fields.push(`is_pinned = $${paramIndex++}`);
+            values.push(is_pinned);
+        }
+        
+        if (fields.length === 0) {
+            return res.status(400).json({ message: "Güncellenecek alan bulunamadı." });
+        }
 
-        const updatedPost = await pool.query(
-            'UPDATE posts SET status = $1 WHERE id = $2 RETURNING *',
-            [newStatus, id]
-        );
+        values.push(id); 
+
+        const queryText = `UPDATE posts SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+        
+        const updatedPost = await pool.query(queryText, values);
 
         if (updatedPost.rows.length === 0) {
             return res.status(404).json({ message: 'Paylaşım bulunamadı.' });
         }
 
-        res.json({ message: `Paylaşım başarıyla ${newStatus} olarak güncellendi.`, post: updatedPost.rows[0] });
+        res.json({ message: `Paylaşım başarıyla güncellendi.`, post: updatedPost.rows[0] });
 
     } catch (err) {
         console.error(err.message);
@@ -189,34 +235,6 @@ app.put('/admin/posts/:id', [authenticateToken, authorizeAdmin], async (req, res
     }
 });
 
-// ... (Tüm diğer rotalar: /register, /login, /posts, /admin/pending-posts) ...
-
-// YENİ EKLENDİ: Tüm onaylanmış paylaşımları getir
-app.get('/api/posts', async (req, res) => {
-    try {
-        // Sadece durumu 'approved' olanları getir
-        const approvedPosts = await pool.query(`
-            SELECT 
-                p.id, 
-                p.title, 
-                p.content, 
-                p.created_at, 
-                u.email AS author_email 
-            FROM posts p
-            JOIN users u ON p.author_id = u.id
-            WHERE p.status = 'approved' 
-            ORDER BY p.created_at DESC;
-        `);
-        
-        // Buradaki JOIN users, hangi kullanıcının paylaştığını göstermemizi sağlar.
-
-        res.json(approvedPosts.rows);
-
-    } catch (err) {
-        console.error("Onaylanmış paylaşımları getirirken hata:", err.message);
-        res.status(500).send('Sunucu Hatası');
-    }
-});
 
 // --- SUNUCUYU BAŞLATMA ---
 const PORT = process.env.PORT || 3000;
