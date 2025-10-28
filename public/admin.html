@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Paneli - İçerik Yönetimi</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .post-card { border: 1px solid #ccc; padding: 15px; margin-bottom: 10px; }
+        .post-header { display: flex; justify-content: space-between; align-items: center; }
+        .post-meta { font-size: 0.8em; color: #555; }
+        .pending-title { color: orange; }
+        .actions button { margin-left: 10px; padding: 8px 15px; cursor: pointer; }
+        .actions .approve { background-color: #4CAF50; color: white; border: none; }
+        .actions .reject { background-color: #f44336; color: white; border: none; }
+        .actions .pin { background-color: #2196F3; color: white; border: none; }
+    </style>
+</head>
+<body data-auth="true" data-role="admin"> 
+    <header>
+        <h1>Admin Paneli</h1>
+        <nav>
+            <a href="index.html">Ana Sayfa</a> |
+            <a href="#" id="logout-button">Çıkış Yap</a>
+        </nav>
+    </header>
+
+    <main>
+        <h2>Onay Bekleyen Paylaşımlar</h2>
+        <p id="loading-message">Yükleniyor...</p>
+        <div id="pending-posts-container">
+            
+        </div>
+
+        <h3 style="margin-top: 40px;">Ek Yönetim Araçları</h3>
+        <p>İleride buraya genel ayarlar, kullanıcı yönetimi gibi özellikler eklenecektir.</p>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Okul Sitesi. Admin</p>
+    </footer>
+
+    <script src="admin.js"></script>
+    <script src="global.js"></script> 
+</body>
+</html>
