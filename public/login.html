@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giriş Yap</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Okul Sitesi - Giriş Yap</h1>
+        <nav>
+            <a href="index.html">Ana Sayfa</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="auth-form">
+            <h2>Giriş Yap</h2>
+            <form id="login-form">
+                <label for="email">E-posta:</label>
+                <input type="email" id="email" required><br><br>
+                
+                <label for="password">Şifre:</label>
+                <input type="password" id="password" required><br><br>
+                
+                <button type="submit">Giriş Yap</button>
+            </form>
+            <p id="message" style="color: red;"></p>
+            <p>Hesabın yok mu? <a href="register.html">Kayıt Ol</a></p>
+        </section>
+    </main>
+    
+    <script src="auth.js"></script> 
+</body>
+</html>
