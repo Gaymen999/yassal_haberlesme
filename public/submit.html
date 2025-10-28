@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duyuru Gönder</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Duyuru Gönder</h1>
+        <nav>
+            <a href="index.html">Ana Sayfa</a> |
+            <a href="#" id="logout-button">Çıkış Yap</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="post-form-section">
+            <h2>Yeni Duyuru Oluştur</h2>
+            <form id="post-submit-form">
+                
+                <label for="title">Başlık:</label>
+                <input type="text" id="title" required><br><br>
+                
+                <label for="content">İçerik:</label>
+                <textarea id="content" rows="8" required></textarea><br><br>
+                
+                <label for="category">Kategori:</label>
+                <select id="category">
+                    <option value="Genel">Genel</option>
+                    <option value="Eğitim">Eğitim</option>
+                    <option value="Spor">Spor</option>
+                    <option value="Sanat">Sanat</option>
+                    <option value="Etkinlik">Etkinlik</option>
+                </select><br><br>
+                
+                <button type="submit">Onaya Gönder</button>
+            </form>
+            <p id="message" style="margin-top: 15px;"></p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Okul Sitesi.</p>
+    </footer>
+
+    <script src="submit.js"></script>
+    <script src="global.js"></script> 
+</body>
+</html>
