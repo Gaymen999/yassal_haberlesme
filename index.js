@@ -6,6 +6,13 @@ const jwt =require('jsonwebtoken');
 const app = express();
 app.use(express.json());
 
+// YENİ EKLENDİ: Statik dosyaların (HTML, CSS, JS) dağıtımını etkinleştirir.
+const path = require('path'); // Node.js'in standart dosya yolu kütüphanesi
+app.use(express.static(path.join(__dirname, 'public')));
+// Kullanıcı siteye girdiğinde 'public' klasörüne yönlendirilecek
+
+// ... aşağıdaki authenticateToken, authorizeAdmin vb. devam edecek.
+
 // --- VERİTABANI AYARLARI ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
