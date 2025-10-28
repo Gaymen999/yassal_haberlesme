@@ -189,6 +189,34 @@ app.put('/admin/posts/:id', [authenticateToken, authorizeAdmin], async (req, res
     }
 });
 
+// ... (Tüm diğer rotalar: /register, /login, /posts, /admin/pending-posts) ...
+
+// YENİ EKLENDİ: Tüm onaylanmış paylaşımları getir
+app.get('/api/posts', async (req, res) => {
+    try {
+        // Sadece durumu 'approved' olanları getir
+        const approvedPosts = await pool.query(`
+            SELECT 
+                p.id, 
+                p.title, 
+                p.content, 
+                p.created_at, 
+                u.email AS author_email 
+            FROM posts p
+            JOIN users u ON p.author_id = u.id
+            WHERE p.status = 'approved' 
+            ORDER BY p.created_at DESC;
+        `);
+        
+        // Buradaki JOIN users, hangi kullanıcının paylaştığını göstermemizi sağlar.
+
+        res.json(approvedPosts.rows);
+
+    } catch (err) {
+        console.error("Onaylanmış paylaşımları getirirken hata:", err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
 
 // --- SUNUCUYU BAŞLATMA ---
 const PORT = process.env.PORT || 3000;
