@@ -14,10 +14,9 @@ const pool = new Pool({
   }
 });
 
-// --- TABLO OLUŞTURMA FONKSİYONU ---
-// Sunucu her başladığında 'users' tablosu var mı diye kontrol eder, yoksa oluşturur.
-const createUsersTable = async () => {
-  const queryText = `
+// --- TABLO OLUŞTURMA FONKSİYONLARI ---
+const createTables = async () => {
+  const usersTableQuery = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email VARCHAR(255) UNIQUE NOT NULL,
@@ -26,49 +25,68 @@ const createUsersTable = async () => {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
+  // YENİ EKLENDİ: Paylaşımlar tablosu
+  const postsTableQuery = `
+    CREATE TABLE IF NOT EXISTS posts (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      content TEXT NOT NULL,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      status VARCHAR(50) DEFAULT 'pending' NOT NULL, -- pending, approved, rejected
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
   try {
-    await pool.query(queryText);
-    console.log("'users' tablosu başarıyla kontrol edildi/oluşturuldu.");
+    await pool.query(usersTableQuery);
+    await pool.query(postsTableQuery); // Yeni tabloyu da kontrol et/oluştur
+    console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
   } catch (err) {
-    console.error("'users' tablosu oluşturulurken hata:", err);
+    console.error("Tablolar oluşturulurken hata:", err);
   }
 };
+
+
+// --- YENİ EKLENDİ: AUTHENTICATION MIDDLEWARE ---
+// Bir API isteğinin "giriş yapmış" bir kullanıcıdan gelip gelmediğini kontrol eder.
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (token == null) return res.sendStatus(401); // Token yoksa yetkisiz
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403); // Token geçersizse yasaklı
+        req.user = user; // Token geçerliyse, kullanıcı bilgisini isteğe ekle
+        next(); // İşleme devam et
+    });
+};
+
 
 // --- API ROTALARI ---
 
 // Ana sayfa
 app.get('/', (req, res) => {
-  res.send('Kullanıcı Sistemi API\'si çalışıyor!');
+  res.send('Kullanıcı Sistemi ve Paylaşım API\'si çalışıyor!');
 });
 
 // 1. KULLANICI KAYIT (/register)
 app.post('/register', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Email ve şifre boş mu diye kontrol et
     if (!email || !password) {
       return res.status(400).json({ message: 'Email ve şifre alanları zorunludur.' });
     }
-
-    // Bu email daha önce alınmış mı?
     const userExists = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (userExists.rows.length > 0) {
       return res.status(409).json({ message: 'Bu email adresi zaten kullanılıyor.' });
     }
-
-    // Şifreyi hash'le (güvenli hale getir)
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Yeni kullanıcıyı veritabanına kaydet
     const newUser = await pool.query(
       'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email, role',
       [email, hashedPassword]
     );
-
     res.status(201).json({ message: 'Kullanıcı başarıyla oluşturuldu.', user: newUser.rows[0] });
-
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Sunucu Hatası');
@@ -79,27 +97,46 @@ app.post('/register', async (req, res) => {
 app.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        // Kullanıcıyı email'e göre bul
         const user = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (user.rows.length === 0) {
             return res.status(400).json({ message: 'Geçersiz email veya şifre.' });
         }
-
-        // Veritabanındaki hash'lenmiş şifre ile kullanıcının girdiği şifreyi karşılaştır
         const validPassword = await bcrypt.compare(password, user.rows[0].password);
         if (!validPassword) {
             return res.status(400).json({ message: 'Geçersiz email veya şifre.' });
         }
-
-        // Başarılı giriş -> JWT (Kimlik Kartı) oluştur
         const token = jwt.sign(
-            { id: user.rows[0].id, role: user.rows[0].role }, // Karta ne yazılacağı
-            process.env.JWT_SECRET, // Gizli anahtar ile imzala
-            { expiresIn: '1h' } // Kartın geçerlilik süresi
+            { id: user.rows[0].id, role: user.rows[0].role },
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+        res.json({ token });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
+
+// 3. YENİ EKLENDİ: PAYLAŞIM GÖNDERME (/posts)
+// authenticateToken sayesinde bu rotaya sadece giriş yapmış kullanıcılar erişebilir.
+app.post('/posts', authenticateToken, async (req, res) => {
+    try {
+        const { title, content } = req.body;
+        const authorId = req.user.id; // Token'dan gelen kullanıcı ID'si
+
+        if (!title || !content) {
+            return res.status(400).json({ message: 'Başlık ve içerik alanları zorunludur.' });
+        }
+
+        const newPost = await pool.query(
+            'INSERT INTO posts (title, content, author_id) VALUES ($1, $2, $3) RETURNING *',
+            [title, content, authorId]
         );
 
-        res.json({ token });
+        res.status(201).json({ 
+            message: 'Paylaşımınız onaya gönderildi. Teşekkürler!', 
+            post: newPost.rows[0] 
+        });
 
     } catch (err) {
         console.error(err.message);
@@ -112,5 +149,5 @@ app.post('/login', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Sunucu ${PORT} portunda başlatıldı...`);
-  createUsersTable(); // Sunucu başlarken tabloyu kontrol et/oluştur.
+  createTables(); // Sunucu başlarken tüm tabloları kontrol et/oluştur.
 });
