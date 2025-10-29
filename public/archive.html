@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duyuru Arşivi</title>
+    <link rel="stylesheet" href="style.css"> 
+</head>
+<body>
+    <header>
+        <h1>Duyuru Arşivi</h1>
+        <nav>
+            <a href="index.html">Ana Sayfa</a>
+        </nav>
+    </header>
+
+    <main>
+        <h2>Yıllara ve Aylara Göre Duyurular</h2>
+        
+        <div class="filter-controls">
+            <label for="archive-filter">Arşiv Yılı/Ayı Seçin:</label>
+            <select id="archive-filter">
+                <option value="">Tüm Duyurular (Son 50)</option>
+                </select>
+        </div>
+
+        <div id="archive-posts-container">
+            <p>Arşiv yükleniyor...</p> 
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Okul Sitesi. Tüm Hakları Saklıdır.</p>
+    </footer>
+
+    <script src="archive.js"></script> 
+    <script src="global.js"></script> 
+</body>
+</html>
