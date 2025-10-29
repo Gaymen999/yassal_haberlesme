@@ -2,11 +2,11 @@ const express = require('express');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const path = require('path'); // Statik dosyalar için
+const path = require('path'); 
 
 const app = express();
 app.use(express.json()); 
-app.use(express.static(path.join(__dirname, 'public'))); // Statik dosyaları dağıt
+app.use(express.static(path.join(__dirname, 'public'))); 
 
 // --- VERİTABANI AYARLARI ---
 const pool = new Pool({
@@ -50,22 +50,17 @@ const createTables = async () => {
 
 
 // --- MIDDLEWARE'LER ---
-
-// 1. Authentication: Kullanıcı giriş yapmış mı?
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    // Token, "Bearer TOKEN_STRING_HERE" formatında gelir
     const token = authHeader && authHeader.split(' ')[1]; 
-    if (token == null) return res.sendStatus(401); // Token yoksa yetkisiz
+    if (token == null) return res.sendStatus(401); 
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403); // Token geçersizse yasaklı
-        req.user = user; // Token'dan gelen kullanıcı bilgisini (id, role) isteğe ekle
+        if (err) return res.sendStatus(403); 
+        req.user = user; 
         next();
     });
 };
-
-// 2. Authorization: Kullanıcı admin mi?
 const authorizeAdmin = (req, res, next) => {
     if (req.user.role !== 'admin') {
         return res.status(403).json({ message: 'Bu işlem için yetkiniz yok.' });
@@ -114,9 +109,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// PAYLAŞIM ROTALARI
-
-// 1. GÖNDERME - Category eklendi
+// PAYLAŞIM GÖNDERME ROTASI
 app.post('/posts', authenticateToken, async (req, res) => { 
     try {
         const { title, content, category } = req.body; 
@@ -142,7 +135,7 @@ app.post('/posts', authenticateToken, async (req, res) => {
     }
 });
 
-// 2. LİSTELEME - Sabitleme ve kategoriye göre sıralama eklendi
+// ANA SAYFA LİSTELEME ROTASI
 app.get('/api/posts', async (req, res) => {
     try {
         const approvedPosts = await pool.query(`
@@ -166,6 +159,31 @@ app.get('/api/posts', async (req, res) => {
 
     } catch (err) {
         console.error("Onaylanmış paylaşımları getirirken hata:", err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
+
+// ARŞİV LİSTELEME ROTASI (YENİ EKLENEN)
+app.get('/api/archive-posts', async (req, res) => {
+    try {
+        const archivedPosts = await pool.query(`
+            SELECT 
+                p.id, 
+                p.title, 
+                p.content, 
+                p.category,          
+                p.created_at, 
+                u.email AS author_email 
+            FROM posts p
+            JOIN users u ON p.author_id = u.id
+            WHERE p.status = 'approved' 
+            ORDER BY p.created_at DESC;
+        `);
+        
+        res.json(archivedPosts.rows);
+
+    } catch (err) {
+        console.error("Arşivlenmiş paylaşımları getirirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
@@ -208,7 +226,7 @@ app.put('/admin/posts/:id', [authenticateToken, authorizeAdmin], async (req, res
             values.push(category);
         }
         
-        if (typeof is_pinned === 'boolean') { // Sadece boolean ise kabul et
+        if (typeof is_pinned === 'boolean') { 
             fields.push(`is_pinned = $${paramIndex++}`);
             values.push(is_pinned);
         }

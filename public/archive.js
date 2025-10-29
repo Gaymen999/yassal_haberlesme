@@ -1,43 +1,30 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const postsContainer = document.getElementById('archive-posts-container');
-    const filterSelect = document.getElementById('archive-filter');
+    const archiveContainer = document.getElementById('archive-posts-container');
     
-    // Hem filtreleme hem de listeleme yapan ana fonksiyon
-    const fetchPosts = async (filterValue = null) => {
-        postsContainer.innerHTML = '<p>Duyurular yükleniyor...</p>';
-        
+    // Arşiv duyurularını API'den çeken fonksiyon
+    const fetchArchivePosts = async () => {
         try {
-            // Şimdilik sadece tüm onaylanmış paylaşımları çekiyoruz.
-            // İleride filtreleme için backend'i güncelleyebiliriz.
-            const response = await fetch('/api/posts'); 
+            // Yeni oluşturduğumuz /api/archive-posts rotasına istek at
+            const response = await fetch('/api/archive-posts');
             
             if (!response.ok) {
-                throw new Error('Arşiv yüklenirken bir hata oluştu.');
+                throw new Error('Arşiv yüklenirken bir hata oluştu: ' + response.statusText);
             }
 
-            let posts = await response.json(); 
-            
-            // Eğer posts.length çok büyükse, burada performansı artırmak için sınırlandırma yaparız.
-            // Örneğin, post.slice(0, 50) ile son 50 duyuruyu gösteririz.
-            
-            postsContainer.innerHTML = ''; 
+            const posts = await response.json(); 
+            archiveContainer.innerHTML = ''; 
 
             if (posts.length === 0) {
-                postsContainer.innerHTML = '<p>Arşivde henüz bir duyuru bulunmamaktadır.</p>';
+                archiveContainer.innerHTML = '<p>Arşivde henüz yayınlanmış duyuru bulunmamaktadır.</p>';
                 return;
             }
-            
-            // Filtreleme yap
-            if (filterValue) {
-                // Şimdilik filtreleme yapmıyoruz. İleride tarih kontrolü buraya gelecek.
-            }
 
-
-            // Duyuruları ekrana yazdır
+            // Her bir arşiv içeriği için HTML oluştur
             posts.forEach(post => {
                 const postElement = document.createElement('div');
-                postElement.classList.add('post-card'); 
+                postElement.classList.add('archive-post-card'); 
 
+                // Tarihi daha okunaklı hale getir
                 const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
                     year: 'numeric',
                     month: 'long',
@@ -51,22 +38,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <p class="post-meta">Yayınlayan: ${post.author_email} (${date})</p>
                     <div class="post-content">
-                        ${post.content.substring(0, 200)}... <a href="#">Devamını Oku</a>
+                        ${post.content}
                     </div>
                 `;
-                postsContainer.appendChild(postElement);
+                archiveContainer.appendChild(postElement);
             });
 
         } catch (error) {
             console.error(error);
-            postsContainer.innerHTML = `<p style="color: red;">Arşiv yüklenirken hata oluştu.</p>`;
+            archiveContainer.innerHTML = `<p style="color: red;">Arşiv yüklenirken hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
         }
     };
 
-    // Filtre değiştiğinde yeniden yükle
-    filterSelect.addEventListener('change', (e) => {
-        fetchPosts(e.target.value);
-    });
-
-    fetchPosts(); 
+    fetchArchivePosts(); 
 });
