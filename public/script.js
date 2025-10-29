@@ -58,13 +58,45 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Sunucuya bağlanılamadı.');
         }
     };
+    
+    // --- YENİ EKLENDİ: Yayından Kaldırma (Unpublish) Fonksiyonu ---
+    const removePostFromSite = async (postId) => {
+        if (!isAdmin) return alert('Yetkisiz işlem!');
+
+        // Yayından kaldırma işlemi için 'reject' (reddet) action'ı gönderiyoruz
+        if (!confirm('DİKKAT: Bu gönderiyi ana sayfadan ve arşivden KALDIRMAK istediğinizden emin misiniz? (Admin Panelinde onay bekleyen olarak görünmeye devam edecektir)')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/admin/posts/${postId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify({ action: 'reject' }) // Durumu 'rejected' yap
+            });
+
+            if (response.ok) {
+                alert('Paylaşım başarıyla yayından kaldırıldı!');
+                fetchPosts(); // Listeyi yeniden çek ve güncelle
+            } else {
+                const data = await response.json();
+                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
+            }
+
+        } catch (error) {
+            console.error('Yayından kaldırma hatası:', error);
+            alert('Sunucuya bağlanılamadı.');
+        }
+    };
 
 
     // --- Duyuruları Çeken Ana Fonksiyon ---
     const fetchPosts = async () => {
         try {
             const response = await fetch('/api/posts');
-            // ... (Hata kontrolleri önceki gibi) ...
             if (!response.ok) throw new Error('Duyurular yüklenirken bir hata oluştu: ' + response.statusText);
 
             const posts = await response.json();
@@ -89,13 +121,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Sabitleme butonu ve metni
                 const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
                 
-                // Admin Butonları HTML'i
+                // Admin Butonları HTML'i - Yayından Kaldır butonu eklendi
                 const adminControls = isAdmin ? `
                     <div class="admin-actions">
                         <button class="pin-toggle-btn" 
                                 data-id="${post.id}" 
-                                data-pinned="${post.is_pinned}">
+                                data-pinned="${post.is_pinned}"
+                                style="background-color: #2196F3; color: white;">
                                 ${pinButtonText}
+                        </button>
+                        <button class="remove-btn" 
+                                data-id="${post.id}" 
+                                style="background-color: darkred; color: white;">
+                                Yayından Kaldır
                         </button>
                     </div>
                 ` : '';
@@ -105,7 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <h3>${post.title}</h3>
                         <span class="category-tag">${post.category}</span>
                         ${post.is_pinned ? '<span class="pinned-badge">⭐ SABİTLENMİŞ</span>' : ''}
-                        ${adminControls} </div>
+                        ${adminControls} 
+                    </div>
                     <p class="post-meta">Yayınlayan: ${post.author_email} (${date})</p>
                     <div class="post-content">
                         ${post.content}
@@ -121,6 +160,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         const postId = btn.dataset.id;
                         const isPinned = btn.dataset.pinned === 'true'; 
                         updatePostPinStatus(postId, isPinned);
+                    });
+                });
+                
+                // YENİ: Yayından Kaldır butonu dinleyicisi
+                postsContainer.querySelectorAll('.remove-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const postId = btn.dataset.id;
+                        removePostFromSite(postId);
                     });
                 });
             }
