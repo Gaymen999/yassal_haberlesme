@@ -1,9 +1,9 @@
+// public/thread.js
 document.addEventListener('DOMContentLoaded', () => {
     const threadContainer = document.getElementById('thread-container');
     const replyFormContainer = document.getElementById('reply-form-container');
     const loadingMessage = document.getElementById('loading-message');
     
-    // 1. URL'den Konu (Thread) ID'sini al
     const params = new URLSearchParams(window.location.search);
     const threadId = params.get('id');
 
@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // 2. API'den Konu ve Cevapları Çek
     const fetchThreadAndReplies = async () => {
         try {
             const response = await fetch(`/api/threads/${threadId}`, {
@@ -27,20 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             const { thread, replies } = data;
 
-            // Sayfa başlığını güncelle
             document.title = thread.title;
-            
-            // Konteyneri temizle
             threadContainer.innerHTML = '';
             loadingMessage.style.display = 'none';
 
-            // 3. Ana Konuyu (Original Post) Ekrana Bas
+            // DEĞİŞTİ: renderOriginalPost ve renderReplies
             renderOriginalPost(thread);
-
-            // 4. Cevapları Ekrana Bas
             renderReplies(replies);
-
-            // 5. Giriş yapılmışsa Cevap Formunu Göster
             checkAuthAndRenderReplyForm();
 
         } catch (error) {
@@ -50,28 +42,49 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    // --- Yardımcı Fonksiyonlar ---
+    // --- Yardımcı Fonksiyonlar (DEĞİŞTİ) ---
+
+    // Bu fonksiyon Technopat tarzı profil bilgisi ekler
+    function renderUserProfile(author) {
+        // Tarihleri formatla
+        const joinDate = new Date(author.author_join_date).toLocaleDateString('tr-TR');
+        
+        // Güvenli hale getir
+        const safeUsername = DOMPurify.sanitize(author.author_username);
+        const safeAvatar = DOMPurify.sanitize(author.author_avatar);
+        const safeTitle = DOMPurify.sanitize(author.author_title);
+        const safePostCount = DOMPurify.sanitize(author.author_post_count);
+
+        return `
+            <div class="user-profile-sidebar">
+                <img src="${safeAvatar}" alt="${safeUsername} Avatar" class="avatar">
+                <strong class="username">${safeUsername}</strong>
+                <span class="user-title">${safeTitle}</span>
+                <hr>
+                <span class="user-stat">Katılım: ${joinDate}</span>
+                <span class="user-stat">Mesaj: ${safePostCount}</span>
+            </div>
+        `;
+    }
 
     function renderOriginalPost(thread) {
         const postElement = document.createElement('div');
-        postElement.className = 'original-post';
+        // DEĞİŞTİ: Technopat tarzı 2 sütunlu yapı için class
+        postElement.className = 'original-post post-layout'; 
         
         const date = new Date(thread.created_at).toLocaleString('tr-TR');
         
-        // DOMPurify ile XSS Koruması
         const safeTitle = DOMPurify.sanitize(thread.title);
         const safeContent = DOMPurify.sanitize(thread.content);
-        const safeAuthor = DOMPurify.sanitize(thread.author_email);
 
         postElement.innerHTML = `
-            <h2>${safeTitle}</h2>
-            <p class="post-meta">
-                Yazan: <strong>${safeAuthor}</strong> | 
-                Tarih: ${date} | 
-                Kategori: <strong>${thread.category_name}</strong>
-            </p>
-            <div class="post-content">
-                ${safeContent}
+            ${renderUserProfile(thread)} <div class="post-main-content"> <h2>${safeTitle}</h2>
+                <p class="post-meta">
+                    Tarih: ${date} | Kategori: <strong>${thread.category_name}</strong>
+                </p>
+                <div class="post-content">
+                    ${safeContent}
+                </div>
             </div>
         `;
         threadContainer.appendChild(postElement);
@@ -87,19 +100,17 @@ document.addEventListener('DOMContentLoaded', () => {
             repliesContainer.innerHTML = `<h3>Cevaplar (${replies.length})</h3>`;
             replies.forEach(reply => {
                 const replyElement = document.createElement('div');
-                replyElement.className = 'reply-card';
+                // DEĞİŞTİ: Class eklendi
+                replyElement.className = 'reply-card post-layout'; 
                 
                 const date = new Date(reply.created_at).toLocaleString('tr-TR');
-                
                 const safeContent = DOMPurify.sanitize(reply.content);
-                const safeAuthor = DOMPurify.sanitize(reply.author_email);
                 
                 replyElement.innerHTML = `
-                    <p class="reply-meta">
-                        Yazan: <strong>${safeAuthor}</strong> | Tarih: ${date}
-                    </p>
-                    <div class="reply-content">
-                        ${safeContent}
+                    ${renderUserProfile(reply)} <div class="post-main-content"> <p class="reply-meta">Tarih: ${date}</p>
+                        <div class="reply-content">
+                            ${safeContent}
+                        </div>
                     </div>
                 `;
                 repliesContainer.appendChild(replyElement);
@@ -108,17 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
         threadContainer.appendChild(repliesContainer);
     }
 
+    // (checkAuthAndRenderReplyForm ve handleReplySubmit fonksiyonları aynı kaldı)
     async function checkAuthAndRenderReplyForm() {
-        // global.js'nin kullandığı API'yi kullanarak giriş durumunu kontrol et
+        // ... (Bu fonksiyonun içi aynı)
         try {
             const res = await fetch('/api/user-status', { credentials: 'include' });
             const data = await res.json();
             
             if (data.loggedIn) {
-                // Giriş yapılmış, formu göster
                 renderReplyForm();
             } else {
-                // Giriş yapılmamış, "Cevap yazmak için giriş yap" linki göster
                 replyFormContainer.innerHTML = `
                     <p style="text-align:center; font-weight:bold;">
                         Cevap yazabilmek için <a href="/login.html?redirect=/thread.html?id=${threadId}">giriş yapmanız</a> gerekmektedir.
@@ -131,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderReplyForm() {
+        // ... (Bu fonksiyonun içi aynı)
         replyFormContainer.innerHTML = `
             <form id="reply-form" class="reply-form">
                 <h3>Cevap Yaz</h3>
@@ -141,12 +152,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p id="reply-message" class="form-message"></p>
             </form>
         `;
-
-        // Forma submit olayı ekle
         document.getElementById('reply-form').addEventListener('submit', handleReplySubmit);
     }
     
     async function handleReplySubmit(e) {
+        // ... (Bu fonksiyonun içi aynı)
         e.preventDefault();
         const content = document.getElementById('reply-content').value;
         const messageElement = document.getElementById('reply-message');
@@ -160,9 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(`/api/threads/${threadId}/reply`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content }),
                 credentials: 'include'
             });
@@ -173,8 +181,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageElement.textContent = 'Cevap başarıyla eklendi!';
                 messageElement.style.color = 'green';
                 document.getElementById('reply-content').value = '';
-                // Sayfayı yenilemek yerine yeni cevabı dinamik ekleyebiliriz,
-                // ama en kolayı şimdilik sayfayı yenilemek:
                 window.location.reload(); 
             } else {
                 throw new Error(data.message || 'Cevap gönderilemedi.');

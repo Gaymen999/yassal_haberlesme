@@ -1,3 +1,4 @@
+// public/script.js
 document.addEventListener('DOMContentLoaded', async () => { 
     const postsContainer = document.getElementById('posts-container');
     let isAdmin = false;
@@ -15,10 +16,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('Kullanıcı durumu kontrol edilemedi.');
     }
     
-    // --- Moderasyon Fonksiyonları (Admin için) ---
-    // (Bunlar adminRoutes.js'e uygun olarak güncellendi)
-    
+    // --- Moderasyon Fonksiyonları (Aynı kaldı) ---
     const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
+        // ... (Bu fonksiyonun içi aynı)
         if (!isAdmin) return alert('Yetkisiz işlem!');
         const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
         if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
@@ -44,18 +44,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
     
-    // YENİ: Konu Silme Fonksiyonu (Admin için)
-    // (Bu rotayı henüz adminRoutes.js'e eklemedik ama ekleyeceğiz)
-    // ŞİMDİLİK BU KISIM ÇALIŞMAYABİLİR veya 'reject' eylemi olmadığı için hata verebilir.
-    // Eski "Yayından Kaldır" fonksiyonunu şimdilik devre dışı bırakıyorum.
-    /*
-    const removePostFromSite = async (postId) => {
-        // ... (Eski 'reject' kodunu buraya koyabilirsin ama 'status' kalktığı için çalışmaz)
-        // Bunun yerine DELETE /api/threads/:id rotası yapılmalı.
-    };
-    */
-
-
     // --- Konuları Çeken Ana Fonksiyon ---
     const fetchPosts = async () => {
         try {
@@ -83,7 +71,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
                 
-                // DEĞİŞTİ: Admin kontrolü artık sadece 'Sabitleme' içeriyor
                 const adminControls = isAdmin ? `
                     <div class="admin-actions">
                         <button class="pin-toggle-btn" 
@@ -97,28 +84,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const safeTitle = DOMPurify.sanitize(post.title);
                 const safeContent = DOMPurify.sanitize(post.content);
-                const safeAuthorEmail = DOMPurify.sanitize(post.author_email);
-                // YENİ: Kategori adı da API'den geliyor
+                // DEĞİŞTİ: author_email yerine author_username
+                const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
                 const safeCategoryName = DOMPurify.sanitize(post.category_name);
 
                 postElement.innerHTML = `
                     <div class="post-header">
                         <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
-                        
                         <span class="category-tag">${safeCategoryName}</span>
-                        
                         ${post.is_pinned ? '<span class="pinned-badge">⭐ SABİTLENMİŞ</span>' : ''}
                         ${adminControls} 
                     </div>
-                    <p class="post-meta">Yayınlayan: ${safeAuthorEmail} (${date})</p>
+                    
+                    <p class="post-meta">Yayınlayan: ${safeAuthorUsername} (${date})</p>
+                    
                     <div class="post-content">
-                        ${safeContent.substring(0, 200)}... <a href="/thread.html?id=${post.id}">Devamını Oku</a>
+                        ${safeContent.substring(0, 200)}... 
+                        <a href="/thread.html?id=${post.id}">Devamını Oku</a>
                     </div>
                 `;
                 postsContainer.appendChild(postElement);
             });
             
-            // Sadece Admin ise buton olay dinleyicilerini ekle
+            // Olay dinleyicileri (Aynı kaldı)
             if (isAdmin) {
                 postsContainer.querySelectorAll('.pin-toggle-btn').forEach(btn => {
                     btn.addEventListener('click', () => {

@@ -1,0 +1,79 @@
+/* === TECHNOPAT TARZI PROFİL SİSTEMİ === */
+
+/* Konu ve Cevaplar için 2 sütunlu genel yapı */
+.post-layout {
+    display: flex;
+    flex-wrap: wrap; /* Mobil için */
+}
+
+/* Sol taraf: Kullanıcı Profil Kutusu */
+.user-profile-sidebar {
+    flex: 0 0 150px; /* 150px genişlik, büyümesin, küçülmesin */
+    padding: 10px;
+    background: #f7f7f7;
+    border-right: 1px solid #e0e0e0;
+    text-align: center;
+    word-wrap: break-word;
+}
+
+.user-profile-sidebar .avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+}
+
+.user-profile-sidebar .username {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #005A9C;
+    display: block;
+}
+
+.user-profile-sidebar .user-title {
+    font-size: 0.9em;
+    color: #333;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.user-profile-sidebar .user-stat {
+    font-size: 0.8em;
+    color: #555;
+    display: block;
+    margin-top: 5px;
+}
+
+/* Sağ taraf: Konu/Cevap İçeriği */
+.post-main-content {
+    flex: 1; /* Kalan tüm alanı kapla */
+    min-width: 300px; /* Sıkışmayı önle */
+    padding: 15px;
+}
+
+/* Mobil Cihazlar için (600px altı) */
+@media (max-width: 600px) {
+    .post-layout {
+        flex-direction: column; /* Sütunları alt alta diz */
+    }
+    .user-profile-sidebar {
+        flex-basis: auto; /* Genişliği serbest bırak */
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0; /* Araya çizgi koy */
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    .user-profile-sidebar .avatar {
+        width: 50px;
+        height: 50px;
+        margin-bottom: 0;
+    }
+    .user-profile-sidebar .user-stat,
+    .user-profile-sidebar hr {
+        display: none; /* Mobilde detayları gizle */
+    }
+}

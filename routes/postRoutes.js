@@ -4,9 +4,7 @@ const { authenticateToken } = require('../middleware/authMiddleware'); // Sadece
 const router = express.Router();
 
 // --- KATEGORİ ROTALARI ---
-
-// YENİ: Tüm kategorileri listele
-// (Yeni konu açma formunda <select> doldurmak için)
+// (Bu rotalar değişmedi, aynı kalıyor)
 router.get('/api/categories', async (req, res) => {
     try {
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
@@ -17,16 +15,18 @@ router.get('/api/categories', async (req, res) => {
     }
 });
 
-// YENİ: Belirli bir kategorideki tüm konuları listele
 router.get('/api/categories/:slug', async (req, res) => {
     try {
         const { slug } = req.params;
         const postsInCategory = await pool.query(`
             SELECT 
                 p.id, p.title, p.is_pinned, p.created_at, 
-                u.email AS author_email,
                 c.name AS category_name,
-                c.slug AS category_slug
+                c.slug AS category_slug,
+                
+                -- DEĞİŞTİ: Kullanıcı bilgileri e-posta yerine profil oldu
+                u.username AS author_username,
+                u.avatar_url AS author_avatar
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
@@ -47,7 +47,7 @@ router.get('/api/categories/:slug', async (req, res) => {
 
 // --- KONU (THREAD/POST) ROTALARI ---
 
-// Yeni Konu Açma (/posts)
+// Yeni Konu Açma (/posts) (Aynı kaldı)
 router.post('/posts', authenticateToken, async (req, res) => { 
     try {
         const { title, content, category_id } = req.body; 
@@ -61,6 +61,10 @@ router.post('/posts', authenticateToken, async (req, res) => {
             'INSERT INTO posts (title, content, category_id, author_id) VALUES ($1, $2, $3, $4) RETURNING *',
             [title, content, category_id, authorId]
         );
+        
+        // YENİ: Konu açan kullanıcının post_count'unu artır
+        // (Bu bir sonraki adımda da yapılabilirdi ama şimdi eklemek mantıklı)
+        await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [authorId]);
 
         res.status(201).json({ 
             message: 'Konunuz başarıyla yayınlandı!', 
@@ -75,15 +79,18 @@ router.post('/posts', authenticateToken, async (req, res) => {
     }
 });
 
-// Ana Sayfa Konu Listeleme (/api/posts)
+// DEĞİŞTİ: Ana Sayfa Konu Listeleme (/api/posts)
 router.get('/api/posts', async (req, res) => {
     try {
         const approvedPosts = await pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.is_pinned, p.created_at, 
-                u.email AS author_email,
                 c.name AS category_name, 
-                c.slug AS category_slug  
+                c.slug AS category_slug,
+                
+                -- DEĞİŞTİ: Profil bilgileri eklendi
+                u.username AS author_username,
+                u.avatar_url AS author_avatar
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
@@ -96,16 +103,17 @@ router.get('/api/posts', async (req, res) => {
     }
 });
 
-// Arşiv Listeleme (/api/archive-posts)
-// (Bu rotayı artık ana sayfayla aynı, istersen silebilirsin)
+// DEĞİŞTİ: Arşiv Listeleme (/api/archive-posts)
 router.get('/api/archive-posts', async (req, res) => {
     try {
         const archivedPosts = await pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.created_at, 
-                u.email AS author_email,
                 c.name AS category_name,
-                c.slug AS category_slug
+                c.slug AS category_slug,
+                
+                -- DEĞİŞTİ: Profil bilgileri eklendi
+                u.username AS author_username
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
@@ -118,7 +126,7 @@ router.get('/api/archive-posts', async (req, res) => {
     }
 });
 
-// YENİ: Tek bir konuyu ve TÜM cevaplarını getir
+// DEĞİŞTİ: Tek bir konuyu ve TÜM cevaplarını getir
 router.get('/api/threads/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -127,8 +135,14 @@ router.get('/api/threads/:id', async (req, res) => {
         const threadQuery = pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.created_at, 
-                u.email AS author_email,
-                c.name AS category_name
+                c.name AS category_name,
+                
+                -- DEĞİŞTİ: Konu sahibinin tam profil bilgisi
+                u.username AS author_username,
+                u.avatar_url AS author_avatar,
+                u.title AS author_title,
+                u.post_count AS author_post_count,
+                u.created_at AS author_join_date
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
@@ -139,21 +153,25 @@ router.get('/api/threads/:id', async (req, res) => {
         const repliesQuery = pool.query(`
             SELECT 
                 r.id, r.content, r.created_at,
-                u.email AS author_email
+                
+                -- DEĞİŞTİ: Cevap sahibinin tam profil bilgisi
+                u.username AS author_username,
+                u.avatar_url AS author_avatar,
+                u.title AS author_title,
+                u.post_count AS author_post_count,
+                u.created_at AS author_join_date
             FROM replies r
             JOIN users u ON r.author_id = u.id
             WHERE r.thread_id = $1
             ORDER BY r.created_at ASC;
         `, [id]);
 
-        // İki sorguyu aynı anda çalıştır
         const [threadResult, repliesResult] = await Promise.all([threadQuery, repliesQuery]);
 
         if (threadResult.rows.length === 0) {
             return res.status(404).json({ message: 'Konu bulunamadı.' });
         }
 
-        // Sonucu birleştir
         const thread = threadResult.rows[0];
         const replies = repliesResult.rows;
 
@@ -168,12 +186,12 @@ router.get('/api/threads/:id', async (req, res) => {
 
 // --- CEVAP (REPLY) ROTALARI ---
 
-// YENİ: Bir konuya cevap yazma
+// DEĞİŞTİ: Bir konuya cevap yazma
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     try {
-        const { id: threadId } = req.params; // Konunun ID'si
-        const { content } = req.body;        // Cevabın içeriği
-        const authorId = req.user.id;      // Cevabı yazan kullanıcı (token'dan)
+        const { id: threadId } = req.params; 
+        const { content } = req.body;        
+        const authorId = req.user.id;      
 
         if (!content) {
             return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
@@ -183,6 +201,9 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
             'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING *',
             [content, threadId, authorId]
         );
+        
+        // YENİ: Cevap yazan kullanıcının post_count'unu artır
+        await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [authorId]);
 
         res.status(201).json({
             message: 'Cevabınız başarıyla eklendi.',
@@ -191,7 +212,6 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
 
     } catch (err) {
         console.error("Cevap eklerken hata:", err.message);
-        // Eğer olmayan bir konuya cevap yazılmaya çalışılırsa
         if (err.code === '23503') { 
              return res.status(404).json({ message: 'Cevap yazmaya çalıştığınız konu bulunamadı.' });
         }
