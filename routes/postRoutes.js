@@ -3,6 +3,9 @@ const { pool } = require('../config/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
+// Sayfa başına gösterilecek cevap sayısı
+const REPLIES_PER_PAGE = 20; // Technopat 20 kullanıyor
+
 // --- KATEGORİ ROTALARI ---
 // (Bu rotalar değişmedi, aynı kalıyor)
 router.get('/api/categories', async (req, res) => { 
@@ -15,6 +18,8 @@ router.get('/api/categories', async (req, res) => {
     }
 });
 router.get('/api/categories/:slug', async (req, res) => { 
+    // TODO: Bu rota da ileride sayfalama gerektirecek (kategori başına 500 konu varsa)
+    // Ama şimdilik aynı bırakıyoruz.
     try {
         const { slug } = req.params;
         const postsInCategory = await pool.query(`
@@ -75,6 +80,7 @@ router.post('/posts', authenticateToken, async (req, res) => {
 });
 
 // Ana Sayfa Konu Listeleme (/api/posts) (Aynı kaldı)
+// TODO: Bu rota da ileride sayfalama gerektirecek.
 router.get('/api/posts', async (req, res) => { 
     try {
         const approvedPosts = await pool.query(`
@@ -121,8 +127,14 @@ router.get('/api/archive-posts', async (req, res) => {
 router.get('/api/threads/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        
+        // YENİ: Sayfa numarasını URL'den al (örn: ?page=2)
+        // parseInt ile sayıya çevir, NaN (Not a Number) ise 1 yap
+        const page = parseInt(req.query.page, 10) || 1;
+        // Atlanacak cevap sayısı (Sayfa 1 ise 0, Sayfa 2 ise 20 atla)
+        const offset = (page - 1) * REPLIES_PER_PAGE;
 
-        // 1. Konunun ana bilgisini çek (YENİ: 'is_locked' eklendi)
+        // 1. Konunun ana bilgisini çek (Aynı kaldı)
         const threadQuery = pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.created_at, p.is_locked, 
@@ -138,7 +150,7 @@ router.get('/api/threads/:id', async (req, res) => {
             WHERE p.id = $1;
         `, [id]);
 
-        // 2. Konuya ait tüm cevapları çek (Aynı kaldı)
+        // 2. Konuya ait o sayfadaki cevapları çek (DEĞİŞTİ: LIMIT ve OFFSET eklendi)
         const repliesQuery = pool.query(`
             SELECT 
                 r.id, r.content, r.created_at,
@@ -150,10 +162,22 @@ router.get('/api/threads/:id', async (req, res) => {
             FROM replies r
             JOIN users u ON r.author_id = u.id
             WHERE r.thread_id = $1
-            ORDER BY r.created_at ASC;
-        `, [id]);
+            ORDER BY r.created_at ASC
+            LIMIT $2 OFFSET $3; 
+        `, [id, REPLIES_PER_PAGE, offset]); // Parametreler eklendi
 
-        const [threadResult, repliesResult] = await Promise.all([threadQuery, repliesQuery]);
+        // YENİ: 3. Toplam cevap sayısını çek (Toplam sayfa sayısını hesaplamak için)
+        const repliesCountQuery = pool.query(
+            'SELECT COUNT(*) FROM replies WHERE thread_id = $1',
+            [id]
+        );
+
+        // Üç sorguyu aynı anda çalıştır
+        const [threadResult, repliesResult, repliesCountResult] = await Promise.all([
+            threadQuery, 
+            repliesQuery, 
+            repliesCountQuery
+        ]);
 
         if (threadResult.rows.length === 0) {
             return res.status(404).json({ message: 'Konu bulunamadı.' });
@@ -161,8 +185,23 @@ router.get('/api/threads/:id', async (req, res) => {
 
         const thread = threadResult.rows[0];
         const replies = repliesResult.rows;
+        
+        // Toplam cevap sayısını ve sayfa sayısını hesapla
+        const totalReplies = parseInt(repliesCountResult.rows[0].count, 10);
+        const totalPages = Math.ceil(totalReplies / REPLIES_PER_PAGE);
 
-        res.json({ thread, replies });
+        // Sonucu birleştir
+        res.json({ 
+            thread, 
+            replies,
+            // YENİ: Sayfalama bilgisi frontend'e gönderiliyor
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalReplies: totalReplies,
+                repliesPerPage: REPLIES_PER_PAGE
+            }
+        });
 
     } catch (err) {
         console.error("Konu ve cevapları getirirken hata:", err.message);
@@ -184,26 +223,41 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
             return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
         }
         
-        // YENİ: Konu kilitli mi diye kontrol et
+        // Konu kilitli mi diye kontrol et
         const threadCheck = await pool.query('SELECT is_locked FROM posts WHERE id = $1', [threadId]);
         if (threadCheck.rows.length === 0) {
             return res.status(404).json({ message: 'Konu bulunamadı.' });
         }
         if (threadCheck.rows[0].is_locked) {
-            // 403 Forbidden - Kilitli konuya cevap atılamaz
             return res.status(403).json({ message: 'Bu konu kilitlenmiştir, yeni cevap yazılamaz.' }); 
         }
         
+        // YENİ: Cevap eklendikten sonra kullanıcıyı son sayfaya yönlendirmek için
+        // Önce mevcut cevap sayısını al
+        const repliesCountResult = await pool.query(
+            'SELECT COUNT(*) FROM replies WHERE thread_id = $1',
+            [threadId]
+        );
+        const totalReplies = parseInt(repliesCountResult.rows[0].count, 10);
+        
+        // Yeni cevabı ekle
         const newReply = await pool.query(
             'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING *',
             [content, threadId, authorId]
         );
         
+        // Post sayısını artır
         await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [authorId]);
+
+        // YENİ: Yeni cevabın eklendiği sayfa numarasını hesapla
+        const newTotalReplies = totalReplies + 1;
+        const lastPage = Math.ceil(newTotalReplies / REPLIES_PER_PAGE);
 
         res.status(201).json({
             message: 'Cevabınız başarıyla eklendi.',
-            reply: newReply.rows[0]
+            reply: newReply.rows[0],
+            // YENİ: Frontend'i yönlendirmek için son sayfa bilgisi
+            lastPage: lastPage 
         });
 
     } catch (err) {

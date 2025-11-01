@@ -31,7 +31,7 @@ const createTables = async () => {
     );
   `;
 
-  // DEĞİŞTİ: "posts" tablosuna 'is_locked' kolonu eklendi
+  // DEĞİŞTİ: "posts" tablosuna 'best_reply_id' kolonu eklendi
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -40,9 +40,13 @@ const createTables = async () => {
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
       is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
-      
-      -- YENİ: Konu kilitli mi?
       is_locked BOOLEAN DEFAULT FALSE NOT NULL,
+      
+      -- YENİ: En İyi Cevap ID'si (varsayılan olarak NULL)
+      -- DİKKAT: Circular dependency (döngüsel bağımlılık) olmasın diye
+      -- FOREIGN KEY (REFERENCES replies(id)) kısmını şimdilik eklemiyoruz.
+      -- Bunu uygulama (kod) tarafında yöneteceğiz.
+      best_reply_id INTEGER NULL, 
       
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
@@ -59,6 +63,7 @@ const createTables = async () => {
   `;
 
   try {
+    // Sıralama önemli
     await pool.query(usersTableQuery);
     await pool.query(categoriesTableQuery); 
     await pool.query(postsTableQuery); 

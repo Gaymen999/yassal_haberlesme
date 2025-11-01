@@ -157,3 +157,102 @@
 .admin-actions-reply button.lock-thread-btn:hover {
     background-color: #ec971f;
 }
+
+/* === SAYFALAMA (PAGINATION) === */
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 15px 0;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.pagination .page-link,
+.pagination .page-dots {
+    padding: 8px 12px;
+    margin: 0 2px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+    color: #005A9C;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.pagination .page-link:hover {
+    background-color: #f4f4f4;
+    border-color: #ccc;
+}
+
+.pagination .page-link.current {
+    background-color: #005A9C;
+    color: white;
+    border-color: #005A9C;
+    font-weight: bold;
+    cursor: default;
+}
+
+.pagination .page-dots {
+    border: none;
+    background: none;
+    padding: 8px 5px;
+}
+
+/* === FAZ 3: ZENGİN METİN İÇERİĞİ STİLLERİ === */
+
+/* Quill.js'in oluşturduğu HTML'i şekillendirme
+  (Bu class'ları .post-content ve .reply-content içindeki
+  DOMPurify'dan geçip gelen içeriğe uygular) 
+*/
+
+/* Alıntı (Blockquote) Stili */
+.post-content blockquote,
+.reply-content blockquote {
+    border-left: 4px solid #ccc;
+    margin-left: 5px;
+    padding-left: 15px;
+    font-style: italic;
+    color: #555;
+}
+
+/* Kod Bloğu (Preformatted) Stili */
+.post-content pre.ql-syntax,
+.reply-content pre.ql-syntax {
+    background-color: #23241f; /* Koyu tema */
+    color: #f8f8f2;             /* Açık renk yazı */
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto; /* Yatay kaydırma */
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+}
+
+/* Satır içi kod (Code) Stili */
+.post-content code,
+.reply-content code {
+    background-color: #eee;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+/* Editörle eklenen resimlerin taşmasını engelleme */
+.post-content img,
+.reply-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 5px;
+}
+
+/* Editörle eklenen videoların taşmasını engelleme */
+.post-content iframe.ql-video,
+.reply-content iframe.ql-video {
+    width: 100%;
+    max-width: 560px; /* Youtube varsayılanı */
+    height: 315px;
+    display: block;
+    margin: 10px 0;
+}

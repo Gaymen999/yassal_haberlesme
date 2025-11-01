@@ -3,11 +3,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageElement = document.getElementById('message');
     const categorySelect = document.getElementById('category');
 
-    // YENİ: Sayfa yüklenir yüklenmez kategorileri API'den çek
+    // YENİ: Quill.js Editörünü Başlatma
+    // Technopat'taki gibi kod bloğu, resim, video vb. butonları ekliyoruz.
+    const toolbarOptions = [
+        ['bold', 'italic', 'underline', 'strike'],        // Kalın, italik vb.
+        ['blockquote', 'code-block'],                     // Alıntı ve kod bloğu
+        [{ 'header': [1, 2, 3, false] }],               // Başlık seviyeleri
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],     // Listeleme
+        [{ 'indent': '-1'}, { 'indent': '+1' }],          // Girinti
+        ['link', 'image', 'video'],                       // Link, Resim, Video
+        ['clean']                                         // Formatlamayı temizle
+    ];
+
+    const quill = new Quill('#editor-container', {
+        modules: {
+            toolbar: toolbarOptions
+        },
+        theme: 'snow', // 'Snow' teması (standart)
+        placeholder: 'Konu içeriğini buraya yazın...'
+    });
+
+
+    // (fetchCategories fonksiyonu aynı kaldı)
     const fetchCategories = async () => {
         try {
             const response = await fetch('/api/categories', {
-                credentials: 'include' // Cookie göndermek için (belki kategori listeleme de korunuyordur)
+                credentials: 'include' 
             });
             if (!response.ok) throw new Error('Kategoriler yüklenemedi.');
 
@@ -18,12 +39,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // <select> listesini doldur
             categorySelect.innerHTML = '<option value="" disabled selected>Bir kategori seçin...</option>';
             categories.forEach(category => {
                 const option = document.createElement('option');
-                option.value = category.id; // Artık ID gönderiyoruz
-                option.textContent = category.name; // Kullanıcıya adı gösteriyoruz
+                option.value = category.id; 
+                option.textContent = category.name; 
                 categorySelect.appendChild(option);
             });
 
@@ -32,8 +52,6 @@ document.addEventListener('DOMContentLoaded', () => {
             categorySelect.innerHTML = '<option value="" disabled selected>Kategoriler yüklenirken hata oluştu.</option>';
         }
     };
-
-    // Fonksiyonu hemen çağır
     fetchCategories();
 
 
@@ -45,9 +63,18 @@ document.addEventListener('DOMContentLoaded', () => {
             messageElement.style.color = 'black';
             
             const title = postSubmitForm.elements.title.value;
-            const content = postSubmitForm.elements.content.value;
-            // DEĞİŞTİ: Artık metin değil, seçilen ID'yi alıyoruz
+            // DEĞİŞTİ: İçeriği <textarea> yerine Quill editöründen alıyoruz
+            // .root.innerHTML bize HTML içeriğini verir.
+            const content = quill.root.innerHTML; 
+            
             const category_id = postSubmitForm.elements.category.value; 
+
+            // YENİ: İçerik boş mu diye kontrol et (Quill boşken <p><br></p> verir)
+            if (!title || !category_id || content === '<p><br></p>' || content.length < 10) {
+                 messageElement.style.color = 'red';
+                 messageElement.textContent = 'Başlık, kategori ve içerik (en az 10 karakter) zorunludur.';
+                 return;
+            }
 
             try {
                 const response = await fetch('/posts', {
@@ -55,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    // DEĞİŞTİ: Body'de 'category_id' gönder
+                    // 'content' artık düz metin değil, HTML gönderiyor
                     body: JSON.stringify({ title, content, category_id }), 
                     credentials: 'include' 
                 });
@@ -66,8 +93,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     messageElement.style.color = 'green';
                     messageElement.textContent = data.message || 'Konunuz başarıyla yayınlandı!';
                     postSubmitForm.reset(); 
-                    // YENİ: Başarılı olunca konunun detay sayfasına yönlendir (Opsiyonel ama güzel olur)
-                    // window.location.href = `/thread.html?id=${data.post.id}`;
+                    quill.root.innerHTML = ''; // Editörü temizle
+                    
+                    // YENİ: Başarılı olunca konunun detay sayfasına yönlendir
+                    // (Bu kodu bir önceki adımda eklemiştik, yine ekliyorum)
+                    window.location.href = `/thread.html?id=${data.post.id}`;
                 } else {
                     messageElement.style.color = 'red';
                     if (response.status === 401 || response.status === 403) {
