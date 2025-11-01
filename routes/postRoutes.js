@@ -3,12 +3,11 @@ const { pool } = require('../config/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
-// Sayfa başına gösterilecek cevap sayısı
-const REPLIES_PER_PAGE = 20; // Technopat 20 kullanıyor
+const REPLIES_PER_PAGE = 20;
 
 // --- KATEGORİ ROTALARI ---
 // (Bu rotalar değişmedi, aynı kalıyor)
-router.get('/api/categories', async (req, res) => { 
+router.get('/api/categories', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
         res.json(categories.rows);
@@ -17,9 +16,7 @@ router.get('/api/categories', async (req, res) => {
         res.status(500).send('Sunucu Hatası');
     }
 });
-router.get('/api/categories/:slug', async (req, res) => { 
-    // TODO: Bu rota da ileride sayfalama gerektirecek (kategori başına 500 konu varsa)
-    // Ama şimdilik aynı bırakıyoruz.
+router.get('/api/categories/:slug', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const { slug } = req.params;
         const postsInCategory = await pool.query(`
@@ -50,7 +47,7 @@ router.get('/api/categories/:slug', async (req, res) => {
 // --- KONU (THREAD/POST) ROTALARI ---
 
 // Yeni Konu Açma (/posts) (Aynı kaldı)
-router.post('/posts', authenticateToken, async (req, res) => { 
+router.post('/posts', authenticateToken, async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const { title, content, category_id } = req.body; 
         const authorId = req.user.id; 
@@ -80,8 +77,7 @@ router.post('/posts', authenticateToken, async (req, res) => {
 });
 
 // Ana Sayfa Konu Listeleme (/api/posts) (Aynı kaldı)
-// TODO: Bu rota da ileride sayfalama gerektirecek.
-router.get('/api/posts', async (req, res) => { 
+router.get('/api/posts', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const approvedPosts = await pool.query(`
             SELECT 
@@ -103,7 +99,7 @@ router.get('/api/posts', async (req, res) => {
 });
 
 // Arşiv Listeleme (/api/archive-posts) (Aynı kaldı)
-router.get('/api/archive-posts', async (req, res) => { 
+router.get('/api/archive-posts', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const archivedPosts = await pool.query(`
             SELECT 
@@ -127,17 +123,13 @@ router.get('/api/archive-posts', async (req, res) => {
 router.get('/api/threads/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        
-        // YENİ: Sayfa numarasını URL'den al (örn: ?page=2)
-        // parseInt ile sayıya çevir, NaN (Not a Number) ise 1 yap
         const page = parseInt(req.query.page, 10) || 1;
-        // Atlanacak cevap sayısı (Sayfa 1 ise 0, Sayfa 2 ise 20 atla)
         const offset = (page - 1) * REPLIES_PER_PAGE;
 
-        // 1. Konunun ana bilgisini çek (Aynı kaldı)
+        // 1. Konunun ana bilgisini çek (YENİ: 'best_reply_id' eklendi)
         const threadQuery = pool.query(`
             SELECT 
-                p.id, p.title, p.content, p.created_at, p.is_locked, 
+                p.id, p.title, p.content, p.created_at, p.is_locked, p.best_reply_id, p.author_id,
                 c.name AS category_name,
                 u.username AS author_username,
                 u.avatar_url AS author_avatar,
@@ -150,7 +142,7 @@ router.get('/api/threads/:id', async (req, res) => {
             WHERE p.id = $1;
         `, [id]);
 
-        // 2. Konuya ait o sayfadaki cevapları çek (DEĞİŞTİ: LIMIT ve OFFSET eklendi)
+        // 2. Sayfalanmış cevapları çek (Aynı kaldı)
         const repliesQuery = pool.query(`
             SELECT 
                 r.id, r.content, r.created_at,
@@ -164,15 +156,15 @@ router.get('/api/threads/:id', async (req, res) => {
             WHERE r.thread_id = $1
             ORDER BY r.created_at ASC
             LIMIT $2 OFFSET $3; 
-        `, [id, REPLIES_PER_PAGE, offset]); // Parametreler eklendi
+        `, [id, REPLIES_PER_PAGE, offset]);
 
-        // YENİ: 3. Toplam cevap sayısını çek (Toplam sayfa sayısını hesaplamak için)
+        // 3. Toplam cevap sayısını çek (Aynı kaldı)
         const repliesCountQuery = pool.query(
             'SELECT COUNT(*) FROM replies WHERE thread_id = $1',
             [id]
         );
 
-        // Üç sorguyu aynı anda çalıştır
+        // Sorguları çalıştır
         const [threadResult, repliesResult, repliesCountResult] = await Promise.all([
             threadQuery, 
             repliesQuery, 
@@ -185,16 +177,34 @@ router.get('/api/threads/:id', async (req, res) => {
 
         const thread = threadResult.rows[0];
         const replies = repliesResult.rows;
-        
-        // Toplam cevap sayısını ve sayfa sayısını hesapla
         const totalReplies = parseInt(repliesCountResult.rows[0].count, 10);
         const totalPages = Math.ceil(totalReplies / REPLIES_PER_PAGE);
+        
+        // YENİ: 4. Eğer 'best_reply_id' varsa, o cevabı da çek
+        let bestReply = null;
+        if (thread.best_reply_id) {
+            const bestReplyQuery = await pool.query(`
+                SELECT 
+                    r.id, r.content, r.created_at,
+                    u.username AS author_username,
+                    u.avatar_url AS author_avatar,
+                    u.title AS author_title,
+                    u.post_count AS author_post_count,
+                    u.created_at AS author_join_date
+                FROM replies r
+                JOIN users u ON r.author_id = u.id
+                WHERE r.id = $1;
+            `, [thread.best_reply_id]);
+            
+            if (bestReplyQuery.rows.length > 0) {
+                bestReply = bestReplyQuery.rows[0];
+            }
+        }
 
-        // Sonucu birleştir
         res.json({ 
             thread, 
             replies,
-            // YENİ: Sayfalama bilgisi frontend'e gönderiliyor
+            bestReply: bestReply, // YENİ: En iyi cevap eklendi
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
@@ -211,8 +221,7 @@ router.get('/api/threads/:id', async (req, res) => {
 
 
 // --- CEVAP (REPLY) ROTALARI ---
-
-// DEĞİŞTİ: Bir konuya cevap yazma (/api/threads/:id/reply)
+// (Cevap yazma rotası aynı kaldı)
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     try {
         const { id: threadId } = req.params; 
@@ -223,7 +232,6 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
             return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
         }
         
-        // Konu kilitli mi diye kontrol et
         const threadCheck = await pool.query('SELECT is_locked FROM posts WHERE id = $1', [threadId]);
         if (threadCheck.rows.length === 0) {
             return res.status(404).json({ message: 'Konu bulunamadı.' });
@@ -232,31 +240,25 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
             return res.status(403).json({ message: 'Bu konu kilitlenmiştir, yeni cevap yazılamaz.' }); 
         }
         
-        // YENİ: Cevap eklendikten sonra kullanıcıyı son sayfaya yönlendirmek için
-        // Önce mevcut cevap sayısını al
         const repliesCountResult = await pool.query(
             'SELECT COUNT(*) FROM replies WHERE thread_id = $1',
             [threadId]
         );
         const totalReplies = parseInt(repliesCountResult.rows[0].count, 10);
         
-        // Yeni cevabı ekle
         const newReply = await pool.query(
             'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING *',
             [content, threadId, authorId]
         );
         
-        // Post sayısını artır
         await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [authorId]);
 
-        // YENİ: Yeni cevabın eklendiği sayfa numarasını hesapla
         const newTotalReplies = totalReplies + 1;
         const lastPage = Math.ceil(newTotalReplies / REPLIES_PER_PAGE);
 
         res.status(201).json({
             message: 'Cevabınız başarıyla eklendi.',
             reply: newReply.rows[0],
-            // YENİ: Frontend'i yönlendirmek için son sayfa bilgisi
             lastPage: lastPage 
         });
 

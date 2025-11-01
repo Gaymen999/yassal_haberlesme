@@ -5,11 +5,11 @@ const router = express.Router();
 
 // --- MODERASYON ROTALARI ---
 
-// DEĞİŞTİ: Konu Güncelleme (Sabitleme VE Kilitleme)
+// Konu Güncelleme (Sabitleme / Kilitleme)
+// (Bu fonksiyon bir önceki adımdaki gibi aynı kaldı)
 router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const { id } = req.params; 
-        // YENİ: 'is_locked' body'den alındı
         const { is_pinned, is_locked } = req.body; 
         
         const fields = [];
@@ -21,7 +21,6 @@ router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) =
             values.push(is_pinned);
         }
         
-        // YENİ: is_locked için güncelleme mantığı eklendi
         if (typeof is_locked === 'boolean') {
             fields.push(`is_locked = $${paramIndex++}`);
             values.push(is_locked);
@@ -45,6 +44,55 @@ router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) =
         res.status(500).send('Sunucu Hatası');
     }
 });
+
+// YENİ: En İyi Cevabı İşaretleme Rotası
+// (Bu rotayı şimdilik sadece Adminler kullanabilir)
+router.put('/mark-best-reply', [authenticateToken, authorizeAdmin], async (req, res) => {
+    try {
+        const { threadId, replyId } = req.body;
+
+        if (!threadId) {
+            return res.status(400).json({ message: 'Konu ID (threadId) zorunludur.' });
+        }
+
+        // 1. Konunun var olduğundan emin ol
+        const thread = await pool.query('SELECT * FROM posts WHERE id = $1', [threadId]);
+        if (thread.rows.length === 0) {
+            return res.status(404).json({ message: 'Konu bulunamadı.' });
+        }
+
+        let bestReplyId = null; // Varsayılan (işareti kaldırma)
+
+        // 2. Eğer bir replyId geldiyse, o cevabın o konuya ait olduğunu doğrula
+        if (replyId) {
+            const reply = await pool.query(
+                'SELECT id FROM replies WHERE id = $1 AND thread_id = $2',
+                [replyId, threadId]
+            );
+            if (reply.rows.length === 0) {
+                return res.status(404).json({ message: 'Cevap bulunamadı veya bu konuya ait değil.' });
+            }
+            bestReplyId = replyId;
+        }
+
+        // 3. Konuyu 'best_reply_id' ile güncelle
+        await pool.query(
+            'UPDATE posts SET best_reply_id = $1 WHERE id = $2',
+            [bestReplyId, threadId]
+        );
+
+        res.status(200).json({ 
+            message: bestReplyId 
+                ? 'Cevap "En İyi Cevap" olarak işaretlendi.' 
+                : '"En İyi Cevap" işareti kaldırıldı.'
+        });
+
+    } catch (err) {
+        console.error("En İyi Cevap işaretlenirken hata:", err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
+
 
 // Konu Silme (Aynı kaldı)
 router.delete('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
