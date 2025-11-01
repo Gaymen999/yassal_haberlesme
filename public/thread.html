@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konu Yükleniyor...</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .thread-container { max-width: 900px; margin: 20px auto; }
+        .original-post { background: #f4f4f4; border: 1px solid #ddd; border-radius: 5px; padding: 20px; margin-bottom: 20px; }
+        .original-post .post-content { font-size: 1.1em; }
+        .replies-container { margin-top: 20px; }
+        .reply-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 5px; padding: 15px; margin-bottom: 15px; }
+        .reply-meta { font-size: 0.9em; color: #555; border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 10px; }
+        .reply-form { margin-top: 30px; background: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .reply-form textarea { width: 100%; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" style="text-decoration:none; color:inherit;">Forum Ana Sayfa</a></h1>
+        <div id="auth-links" style="display: flex; gap: 15px;">
+            </div>
+    </header>
+
+    <main>
+        <div id="thread-container" class="thread-container">
+            <p id="loading-message">Konu ve cevaplar yükleniyor...</p>
+        </div>
+        
+        <div id="reply-form-container" class="thread-container">
+            </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Yassal Haberleşme</p>
+    </footer>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="global.js"></script> 
+    <script src="thread.js"></script> 
+</body>
+</html>

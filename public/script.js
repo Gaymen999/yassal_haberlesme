@@ -2,9 +2,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const postsContainer = document.getElementById('posts-container');
     let isAdmin = false;
 
+    // Kullanıcı durumunu kontrol et (Admin mi?)
     try {
         const response = await fetch('/api/user-status', {
-            credentials: 'include' // DÜZELTME
+            credentials: 'include' 
         });
         const data = await response.json();
         if (data.loggedIn && data.user.role === 'admin') {
@@ -14,83 +15,58 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('Kullanıcı durumu kontrol edilemedi.');
     }
     
-    // --- Post Güncelleme Fonksiyonu (Sabitleme/Kaldırma) ---
+    // --- Moderasyon Fonksiyonları (Admin için) ---
+    // (Bunlar adminRoutes.js'e uygun olarak güncellendi)
+    
     const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
         if (!isAdmin) return alert('Yetkisiz işlem!');
-
         const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
-        if (!confirm(`Bu içeriği ${actionText}mak istediğinize emin misiniz?`)) {
-            return;
-        }
+        if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
         
         try {
             const response = await fetch(`/admin/posts/${postId}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
-                credentials: 'include' // DÜZELTME
+                credentials: 'include' 
             });
 
             if (response.ok) {
-                alert(`Paylaşım başarıyla ${isCurrentlyPinned ? 'Sabitlemesi Kaldırıldı' : 'Sabitlendi'}!`);
+                alert(`Konu başarıyla ${isCurrentlyPinned ? 'Sabitlemesi Kaldırıldı' : 'Sabitlendi'}!`);
                 fetchPosts(); 
             } else {
                 const data = await response.json();
                 alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
             }
-
         } catch (error) {
             console.error('Sabitleme hatası:', error);
             alert('Sunucuya bağlanılamadı.');
         }
     };
     
-    // --- Yayından Kaldırma (Unpublish) Fonksiyonu ---
+    // YENİ: Konu Silme Fonksiyonu (Admin için)
+    // (Bu rotayı henüz adminRoutes.js'e eklemedik ama ekleyeceğiz)
+    // ŞİMDİLİK BU KISIM ÇALIŞMAYABİLİR veya 'reject' eylemi olmadığı için hata verebilir.
+    // Eski "Yayından Kaldır" fonksiyonunu şimdilik devre dışı bırakıyorum.
+    /*
     const removePostFromSite = async (postId) => {
-        if (!isAdmin) return alert('Yetkisiz işlem!');
-
-        if (!confirm('DİKKAT: Bu gönderiyi ana sayfadan ve arşivden KALDIRMAK istediğinizden emin misiniz?')) {
-            return;
-        }
-        
-        try {
-            const response = await fetch(`/admin/posts/${postId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ action: 'reject' }),
-                credentials: 'include' // DÜZELTME
-            });
-
-            if (response.ok) {
-                alert('Paylaşım başarıyla yayından kaldırıldı!');
-                fetchPosts(); 
-            } else {
-                const data = await response.json();
-                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
-
-        } catch (error) {
-            console.error('Yayından kaldırma hatası:', error);
-            alert('Sunucuya bağlanılamadı.');
-        }
+        // ... (Eski 'reject' kodunu buraya koyabilirsin ama 'status' kalktığı için çalışmaz)
+        // Bunun yerine DELETE /api/threads/:id rotası yapılmalı.
     };
+    */
 
 
-    // --- Duyuruları Çeken Ana Fonksiyon ---
+    // --- Konuları Çeken Ana Fonksiyon ---
     const fetchPosts = async () => {
         try {
-            const response = await fetch('/api/posts'); // Buna gerek yok, public rota
-            if (!response.ok) throw new Error('Duyurular yüklenirken bir hata oluştu: ' + response.statusText);
+            const response = await fetch('/api/posts', { credentials: 'include' });
+            if (!response.ok) throw new Error('Konular yüklenirken bir hata oluştu: ' + response.statusText);
 
             const posts = await response.json();
             postsContainer.innerHTML = ''; 
 
             if (posts.length === 0) {
-                postsContainer.innerHTML = '<p>Şu an yayınlanmış onaylı bir duyuru bulunmamaktadır.</p>';
+                postsContainer.innerHTML = '<p>Şu an yayınlanmış konu bulunmamaktadır.</p>';
                 return;
             }
 
@@ -107,6 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
                 
+                // DEĞİŞTİ: Admin kontrolü artık sadece 'Sabitleme' içeriyor
                 const adminControls = isAdmin ? `
                     <div class="admin-actions">
                         <button class="pin-toggle-btn" 
@@ -115,33 +92,33 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 style="background-color: #2196F3; color: white;">
                                 ${pinButtonText}
                         </button>
-                        <button class="remove-btn" 
-                                data-id="${post.id}" 
-                                style="background-color: darkred; color: white;">
-                                Yayından Kaldır
-                        </button>
                     </div>
                 ` : '';
 
                 const safeTitle = DOMPurify.sanitize(post.title);
                 const safeContent = DOMPurify.sanitize(post.content);
                 const safeAuthorEmail = DOMPurify.sanitize(post.author_email);
+                // YENİ: Kategori adı da API'den geliyor
+                const safeCategoryName = DOMPurify.sanitize(post.category_name);
 
                 postElement.innerHTML = `
                     <div class="post-header">
-                        <h3>${safeTitle}</h3>
-                        <span class="category-tag">${post.category}</span>
+                        <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
+                        
+                        <span class="category-tag">${safeCategoryName}</span>
+                        
                         ${post.is_pinned ? '<span class="pinned-badge">⭐ SABİTLENMİŞ</span>' : ''}
                         ${adminControls} 
                     </div>
                     <p class="post-meta">Yayınlayan: ${safeAuthorEmail} (${date})</p>
                     <div class="post-content">
-                        ${safeContent}
+                        ${safeContent.substring(0, 200)}... <a href="/thread.html?id=${post.id}">Devamını Oku</a>
                     </div>
                 `;
                 postsContainer.appendChild(postElement);
             });
             
+            // Sadece Admin ise buton olay dinleyicilerini ekle
             if (isAdmin) {
                 postsContainer.querySelectorAll('.pin-toggle-btn').forEach(btn => {
                     btn.addEventListener('click', () => {
@@ -150,18 +127,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         updatePostPinStatus(postId, isPinned);
                     });
                 });
-                
-                postsContainer.querySelectorAll('.remove-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const postId = btn.dataset.id;
-                        removePostFromSite(postId);
-                    });
-                });
             }
 
         } catch (error) {
             console.error(error);
-            postsContainer.innerHTML = `<p style="color: red;">Duyurular yüklenirken hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
+            postsContainer.innerHTML = `<p style="color: red;">Konular yüklenirken hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
         }
     };
 
