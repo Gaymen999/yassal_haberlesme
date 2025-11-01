@@ -1,55 +1,78 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    const container = document.getElementById('pending-posts-container');
+    const container = document.getElementById('posts-management-container');
     const loadingMessage = document.getElementById('loading-message');
     
-    // --- Admin İşlemleri (API Call) ---
-    const updatePostStatus = async (postId, action, category = null, is_pinned = null) => {
+    // --- Moderasyon İşlemleri (API Çağrıları) ---
+
+    // Konu Sabitleme / Sabitlemeyi Kaldırma
+    const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
+        const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
+        if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
+        
         try {
-            const bodyData = { action }; 
-            
-            if (category !== null) bodyData.category = category;
-            if (is_pinned !== null) bodyData.is_pinned = is_pinned;
-            
             const response = await fetch(`/admin/posts/${postId}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(bodyData),
-                credentials: 'include' // DÜZELTME: Cookie'yi göndermek için eklendi
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
+                credentials: 'include' 
             });
 
             if (response.ok) {
-                fetchPendingPosts(); 
+                alert(`Konu başarıyla ${isCurrentlyPinned ? 'Sabitlemesi Kaldırıldı' : 'Sabitlendi'}!`);
+                fetchAllPosts(); // Listeyi yenile
             } else {
                 const data = await response.json();
                 alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
             }
-
         } catch (error) {
-            console.error('Gönderim hatası:', error);
-            alert('Sunucuya bağlanılamadı.'); // Buraya düşüyordun
+            console.error('Sabitleme hatası:', error);
+            alert('Sunucuya bağlanılamadı.');
+        }
+    };
+    
+    // Konu Silme
+    const deletePost = async (postId, postTitle) => {
+        if (!confirm(`DİKKAT! "${postTitle}" başlıklı konuyu ve TÜM CEVAPLARINI kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/admin/posts/${postId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                alert('Konu ve tüm cevapları başarıyla silindi.');
+                fetchAllPosts(); // Listeyi yenile
+            } else {
+                const data = await response.json();
+                alert(`Silme işlemi başarısız: ${data.message || 'Sunucu hatası.'}`);
+            }
+        } catch (error) {
+            console.error('Konu silme hatası:', error);
+            alert('Sunucuya bağlanılamadı.');
         }
     };
 
-
-    // --- Onay Bekleyenleri Listeleme ---
-    const fetchPendingPosts = async () => {
+    // --- Tüm Konuları Listeleme Fonksiyonu ---
+    const fetchAllPosts = async () => {
         container.innerHTML = ''; 
         loadingMessage.style.display = 'block'; 
 
         try {
-            const response = await fetch('/admin/pending-posts', {
+            // DEĞİŞTİ: '/admin/pending-posts' yerine '/api/posts' çağırılıyor
+            const response = await fetch('/api/posts', {
                 method: 'GET',
-                credentials: 'include' // DÜZELTME: Cookie'yi göndermek için eklendi
+                credentials: 'include' // Admin yetkimizi cookie ile gönderiyoruz
             });
 
             if (!response.ok) {
                 if (response.status === 401 || response.status === 403) {
-                     container.innerHTML = '<h3>Yetkiniz yok veya oturum süreniz doldu.</h3>';
+                     // Bu durumun /api/posts'ta olmaması lazım ama olursa diye
                      window.location.href = '/login.html';
                 } else {
-                     container.innerHTML = '<h3>Hata: Onay bekleyenleri çekerken sorun oluştu.</h3>';
+                     container.innerHTML = '<h3>Hata: Konuları çekerken sorun oluştu.</h3>';
                 }
                 loadingMessage.style.display = 'none';
                 return;
@@ -59,59 +82,69 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadingMessage.style.display = 'none';
 
             if (posts.length === 0) {
-                container.innerHTML = '<p>Şu an onay bekleyen hiçbir paylaşım yok. Her şey yolunda!</p>';
+                container.innerHTML = '<p>Yönetilecek hiç konu bulunamadı.</p>';
                 return;
             }
             
-            // ÖNEMLİ: admin.html'e DOMPurify script'ini eklemeyi unutma
-            // (Bir önceki incelemede bahsettiğim XSS açığı)
-
             posts.forEach(post => {
                 const postElement = document.createElement('div');
                 postElement.classList.add('post-card');
+                if (post.is_pinned) postElement.classList.add('pinned');
                 
                 const date = new Date(post.created_at).toLocaleDateString('tr-TR');
+
+                // YENİ: XSS Koruması eklendi
+                const safeTitle = DOMPurify.sanitize(post.title);
+                const safeAuthor = DOMPurify.sanitize(post.author_email);
+                const safeCategory = DOMPurify.sanitize(post.category_name);
+
+                const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
                 
-                // GÜVENLİK UYARISI: Burası hala XSS açığına sahip.
-                // Lütfen admin.html'e DOMPurify ekle ve 
-                // ${post.title} ile ${post.content}'i sanitize et.
                 postElement.innerHTML = `
                     <div class="post-header">
-                        <h4 class="pending-title">${post.title} (ID: ${post.id})</h4>
+                        <h4 class="pending-title">
+                            <a href="/thread.html?id=${post.id}" target="_blank">${safeTitle} (ID: ${post.id})</a>
+                        </h4>
                         <div class="actions">
-                            <button class="approve" data-id="${post.id}">ONAYLA</button>
-                            <button class="reject" data-id="${post.id}">REDDET</button>
-                            <button class="pin" data-id="${post.id}" data-pinned="${post.is_pinned}">
-                                ${post.is_pinned ? 'SABİTLEMEYİ KALDIR' : 'SABİTLE'}
+                            <button class="pin-toggle-btn" 
+                                data-id="${post.id}" 
+                                data-pinned="${post.is_pinned}" 
+                                style="background-color: #2196F3;">
+                                ${pinButtonText}
+                            </button>
+                            <button class="delete-post-btn" 
+                                data-id="${post.id}" 
+                                data-title="${safeTitle}" 
+                                style="background-color: darkred;">
+                                KONUYU SİL
                             </button>
                         </div>
                     </div>
                     <p class="post-meta">
-                        Yazar: ${post.author_id} | 
+                        Yazar: ${safeAuthor} | 
                         Tarih: ${date} | 
-                        Kategori: <strong>${post.category}</strong>
+                        Kategori: <strong>${safeCategory}</strong>
                     </p>
-                    <div class="post-content">
-                        ${post.content}
-                    </div>
                 `;
                 container.appendChild(postElement);
             });
             
             // Buton Olay Dinleyicileri Ekle
-            container.querySelectorAll('.approve').forEach(btn => {
-                btn.addEventListener('click', () => updatePostStatus(btn.dataset.id, 'approve'));
-            });
-            container.querySelectorAll('.reject').forEach(btn => {
-                btn.addEventListener('click', () => updatePostStatus(btn.dataset.id, 'reject'));
-            });
-            container.querySelectorAll('.pin').forEach(btn => {
+            container.querySelectorAll('.pin-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const isPinned = btn.dataset.pinned === 'true'; 
-                    updatePostStatus(btn.dataset.id, null, null, !isPinned);
+                    const postId = btn.dataset.id;
+                    const isPinned = btn.dataset.pinned === 'true';
+                    updatePostPinStatus(postId, isPinned);
                 });
             });
-
+            
+            container.querySelectorAll('.delete-post-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const postId = btn.dataset.id;
+                    const postTitle = btn.dataset.title;
+                    deletePost(postId, postTitle);
+                });
+            });
 
         } catch (error) {
             console.error('Yükleme hatası:', error);
@@ -120,5 +153,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    fetchPendingPosts();
+    fetchAllPosts();
 });

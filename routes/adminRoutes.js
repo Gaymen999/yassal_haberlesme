@@ -5,29 +5,20 @@ const router = express.Router();
 
 // --- MODERASYON ROTALARI ---
 
-// KALDIRILDI: Onay bekleyenleri getirme rotası (/pending-posts)
-// 'status' kolonu artık olmadığı için bu rota kaldırıldı.
-
-// DEĞİŞTİ: PAYLAŞIM GÜNCELLEME (/admin/posts/:id)
-// Bu rota artık SADECE moderasyon işlemleri (sabitleme vb.) yapar.
+// Konu Güncelleme (Sabitleme)
 router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const { id } = req.params; 
-        // DEĞİŞTİ: 'action' ve 'category' kaldırıldı. Sadece 'is_pinned' kaldı.
         const { is_pinned } = req.body; 
         
         const fields = [];
         const values = [];
         let paramIndex = 1;
 
-        // KALDIRILDI: 'action' (approve/reject) bloğu tamamen silindi.
-        // KALDIRILDI: 'category' bloğu silindi.
-
         if (typeof is_pinned === 'boolean') { 
             fields.push(`is_pinned = $${paramIndex++}`);
             values.push(is_pinned);
         } else {
-            // Eğer is_pinned dışında bir şey gelirse (veya hiçbir şey gelmezse)
              return res.status(400).json({ message: "Güncellenecek geçerli alan bulunamadı. (Sadece is_pinned)" });
         }
         
@@ -42,6 +33,47 @@ router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) =
 
     } catch (err) {
         console.error(err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
+
+// YENİ: Konu Silme (Tüm cevaplarıyla birlikte)
+router.delete('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // 'posts' tablosunda ON DELETE CASCADE ayarı olduğu için,
+        // biz konuyu sildiğimizde veritabanı otomatik olarak 
+        // bu konuya bağlı tüm cevapları (replies) da silecektir.
+        const deletePost = await pool.query('DELETE FROM posts WHERE id = $1 RETURNING *', [id]);
+
+        if (deletePost.rows.length === 0) {
+            return res.status(404).json({ message: 'Silinecek konu bulunamadı.' });
+        }
+        
+        res.status(200).json({ message: `Konu (ID: ${id}) ve tüm cevapları başarıyla silindi.` });
+
+    } catch (err) {
+        console.error("Konu silinirken hata:", err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
+
+// YENİ: Tek Bir Cevabı Silme
+router.delete('/replies/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const deleteReply = await pool.query('DELETE FROM replies WHERE id = $1 RETURNING *', [id]);
+
+        if (deleteReply.rows.length === 0) {
+            return res.status(404).json({ message: 'Silinecek cevap bulunamadı.' });
+        }
+        
+        res.status(200).json({ message: `Cevap (ID: ${id}) başarıyla silindi.` });
+
+    } catch (err) {
+        console.error("Cevap silinirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
