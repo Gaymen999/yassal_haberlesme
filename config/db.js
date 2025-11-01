@@ -19,6 +19,7 @@ const createTables = async () => {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
+  
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -33,9 +34,30 @@ const createTables = async () => {
       approval_date TIMESTAMPTZ                
     );
   `;
+
+  // YENİ: "Cevaplar" tablosunun SQL tanımı
+  const repliesTableQuery = `
+    CREATE TABLE IF NOT EXISTS replies (
+      id SERIAL PRIMARY KEY,
+      content TEXT NOT NULL,
+      
+      -- Bu cevabın hangi konuya (thread/post) bağlı olduğu
+      -- ON DELETE CASCADE: Eğer ana konu (post) silinirse, bu cevaplar da otomatik silinir.
+      thread_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      
+      -- Bu cevabı hangi kullanıcının yazdığı
+      -- ON DELETE CASCADE: Eğer kullanıcı silinirse, bu cevapları da silinir.
+      author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
+
   try {
     await pool.query(usersTableQuery);
     await pool.query(postsTableQuery); 
+    await pool.query(repliesTableQuery); // YENİ: Yeni tabloyu oluşturma komutu eklendi
+    
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
   } catch (err) {
     console.error("Tablolar oluşturulurken hata:", err);
