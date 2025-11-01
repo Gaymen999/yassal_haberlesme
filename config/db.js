@@ -72,7 +72,7 @@ const createTables = async () => {
     await pool.query(repliesTableQuery); 
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
-  } catch (err {
+  } catch (err) { // <--- HATA BURADA DÜZELTİLDİ
     console.error("Tablolar oluşturulurken hata:", err);
   }
 };
