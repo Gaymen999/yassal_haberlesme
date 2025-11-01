@@ -60,9 +60,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const data = await response.json();
 
-                if (response.ok && data.token) {
-                    // Token'ı tarayıcıda güvenli bir şekilde sakla
-                    localStorage.setItem('authToken', data.token); 
+                if (response.ok) {
+                    // KALDIRILDI: localStorage.setItem('authToken', data.token); 
+                    // Token artık sunucu tarafından HttpOnly cookie'ye yazılıyor.
                     
                     messageElement.style.color = 'green';
                     messageElement.textContent = 'Giriş başarılı! Yönlendiriliyorsunuz...';

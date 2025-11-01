@@ -3,9 +3,11 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path'); 
+const cookieParser = require('cookie-parser'); // YENİ EKLENDİ
 
 const app = express();
 app.use(express.json()); 
+app.use(cookieParser()); // YENİ EKLENDİ
 app.use(express.static(path.join(__dirname, 'public'))); 
 
 // --- VERİTABANI AYARLARI ---
@@ -36,7 +38,11 @@ const createTables = async () => {
       status VARCHAR(50) DEFAULT 'pending' NOT NULL, 
       category VARCHAR(50) DEFAULT 'Genel' NOT NULL, 
       is_pinned BOOLEAN DEFAULT FALSE NOT NULL,     
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      
+      -- YENİ EKLENEN YASAL İZLEME (AUDIT) ALANLARI --
+      approver_id INTEGER REFERENCES users(id), 
+      approval_date TIMESTAMPTZ                
     );
   `;
   try {
@@ -49,10 +55,11 @@ const createTables = async () => {
 };
 
 
-// --- MIDDLEWARE'LER ---
+// --- MIDDLEWARE'LER (HttpOnly Cookie'ye Güncellendi) ---
 const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; 
+    // Token artık 'Authorization' header'ından DEĞİL, HttpOnly Cookie'den okunuyor.
+    const token = req.cookies.authToken; 
+    
     if (token == null) return res.sendStatus(401); 
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
@@ -61,6 +68,7 @@ const authenticateToken = (req, res, next) => {
         next();
     });
 };
+
 const authorizeAdmin = (req, res, next) => {
     if (req.user.role !== 'admin') {
         return res.status(403).json({ message: 'Bu işlem için yetkiniz yok.' });
@@ -90,6 +98,8 @@ app.post('/register', async (req, res) => {
         res.status(500).send('Sunucu Hatası');
     }
 });
+
+// /login (HttpOnly Cookie'ye Güncellendi)
 app.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -97,19 +107,53 @@ app.post('/login', async (req, res) => {
         if (user.rows.length === 0) return res.status(400).json({ message: 'Hatalı giriş.' });
         const validPassword = await bcrypt.compare(password, user.rows[0].password);
         if (!validPassword) return res.status(400).json({ message: 'Hatalı giriş.' });
+        
         const token = jwt.sign(
             { id: user.rows[0].id, role: user.rows[0].role },
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
-        res.json({ token });
+
+        // YENİ: Token'ı body yerine HttpOnly Cookie'ye bas
+        res.cookie('authToken', token, {
+            httpOnly: true, // JavaScript'in cookie'ye erişimini engeller (XSS Koruması)
+            secure: process.env.NODE_ENV === 'production', // Sadece HTTPS'te gönder
+            maxAge: 3600000 // 1 saat (ms cinsinden)
+        });
+
+        res.json({ message: "Giriş başarılı." }); // Token'ı body'den kaldırıldı
+
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
 
+// YENİ: Güvenli Çıkış Rotası
+app.post('/logout', (req, res) => {
+    res.clearCookie('authToken'); // Güvenli cookie'yi sil
+    res.status(200).json({ message: 'Çıkış başarılı.' });
+});
+
+// YENİ: Kullanıcı Durumunu Kontrol Etme Rotası
+// (Frontend'in localStorage olmadan kimin giriş yaptığını bilmesi için)
+app.get('/api/user-status', (req, res) => {
+    const token = req.cookies.authToken;
+    if (!token) {
+        return res.json({ loggedIn: false });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.json({ loggedIn: false });
+        }
+        res.json({ loggedIn: true, user: user });
+    });
+});
+
+
 // PAYLAŞIM GÖNDERME ROTASI
+// (authenticateToken artık cookie'den çalıştığı için kod değişikliği gerekmez)
 app.post('/posts', authenticateToken, async (req, res) => { 
     try {
         const { title, content, category } = req.body; 
@@ -163,7 +207,7 @@ app.get('/api/posts', async (req, res) => {
     }
 });
 
-// ARŞİV LİSTELEME ROTASI (YENİ EKLENEN)
+// ARŞİV LİSTELEME ROTASI
 app.get('/api/archive-posts', async (req, res) => {
     try {
         const archivedPosts = await pool.query(`
@@ -202,11 +246,12 @@ app.get('/admin/pending-posts', [authenticateToken, authorizeAdmin], async (req,
     }
 });
 
-// 2. PAYLAŞIM GÜNCELLEME (Onay/Reddet/Sabitleme/Kategori)
+// 2. PAYLAŞIM GÜNCELLEME (Audit Log Eklendi)
 app.put('/admin/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const { id } = req.params; 
         const { action, category, is_pinned } = req.body; 
+        const adminId = req.user.id; // YENİ: İşlemi yapan adminin ID'si
         
         const fields = [];
         const values = [];
@@ -219,6 +264,11 @@ app.put('/admin/posts/:id', [authenticateToken, authorizeAdmin], async (req, res
             const newStatus = action === 'approve' ? 'approved' : 'rejected';
             fields.push(`status = $${paramIndex++}`);
             values.push(newStatus);
+
+            // YENİ: Yasal izleme (Audit) alanlarını doldur
+            fields.push(`approver_id = $${paramIndex++}`);
+            values.push(adminId);
+            fields.push(`approval_date = NOW()`);
         }
 
         if (category !== undefined) {

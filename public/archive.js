@@ -31,14 +31,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     day: 'numeric'
                 });
 
+                // YENİ: XSS Koruması için DOMPurify kullan
+                const safeTitle = DOMPurify.sanitize(post.title);
+                const safeContent = DOMPurify.sanitize(post.content);
+                const safeAuthorEmail = DOMPurify.sanitize(post.author_email);
+
                 postElement.innerHTML = `
                     <div class="post-header">
-                        <h3>${post.title}</h3>
+                        <h3>${safeTitle}</h3>
                         <span class="category-tag">${post.category}</span>
                     </div>
-                    <p class="post-meta">Yayınlayan: ${post.author_email} (${date})</p>
+                    <p class="post-meta">Yayınlayan: ${safeAuthorEmail} (${date})</p>
                     <div class="post-content">
-                        ${post.content}
+                        ${safeContent}
                     </div>
                 `;
                 archiveContainer.appendChild(postElement);

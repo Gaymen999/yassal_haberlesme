@@ -8,13 +8,13 @@ document.addEventListener('DOMContentLoaded', () => {
             messageElement.textContent = 'Gönderiliyor...';
             messageElement.style.color = 'black';
             
-            const token = localStorage.getItem('authToken');
+            // const token = localStorage.getItem('authToken'); // KALDIRILDI
 
-            if (!token) {
-                messageElement.textContent = 'Hata: Giriş yapılmamış.';
-                window.location.href = '/login.html';
-                return;
-            }
+            // if (!token) { // KALDIRILDI (Sunucu bu kontrolü yapacak)
+            //     messageElement.textContent = 'Hata: Giriş yapılmamış.';
+            //     window.location.href = '/login.html';
+            //     return;
+            // }
 
             const title = postSubmitForm.elements.title.value;
             const content = postSubmitForm.elements.content.value;
@@ -25,8 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        // !!! KRİTİK: TOKEN'I HEADERS'A EKLEME !!!
-                        'Authorization': `Bearer ${token}` 
+                        // KALDIRILDI: 'Authorization': `Bearer ${token}` 
                     },
                     body: JSON.stringify({ title, content, category }),
                 });
@@ -42,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Hata 401/403 ise yetkisizlik hatasıdır.
                     if (response.status === 401 || response.status === 403) {
                          messageElement.textContent = 'Oturum süreniz doldu, lütfen tekrar giriş yapın.';
-                         localStorage.removeItem('authToken');
+                         // localStorage.removeItem('authToken'); // KALDIRILDI
                          setTimeout(() => window.location.href = '/login.html', 2000);
                     } else {
                          messageElement.textContent = data.message || 'Gönderim sırasında bir hata oluştu.';

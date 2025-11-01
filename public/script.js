@@ -1,29 +1,18 @@
-// Helper function to decode JWT token (Aynı global.js'de olduğu gibi)
-const decodeToken = (token) => {
-    try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        return JSON.parse(jsonPayload);
-    } catch (e) {
-        return null;
-    }
-};
+// Helper function (decodeToken) buradan kaldırıldı, artık /api/user-status kullanılıyor.
 
-
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
     const postsContainer = document.getElementById('posts-container');
-    const token = localStorage.getItem('authToken');
     let isAdmin = false;
 
-    // Token varsa ve çözülebiliyorsa rolü kontrol et
-    if (token) {
-        const user = decodeToken(token);
-        if (user && user.role === 'admin') {
+    // YENİ: Token veya rolü localStorage'dan okumak yerine sunucuya sor
+    try {
+        const response = await fetch('/api/user-status');
+        const data = await response.json();
+        if (data.loggedIn && data.user.role === 'admin') {
             isAdmin = true;
         }
+    } catch (error) {
+        console.warn('Kullanıcı durumu kontrol edilemedi.');
     }
     
     // --- Post Güncelleme Fonksiyonu (Sabitleme/Kaldırma) ---
@@ -40,9 +29,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` 
+                    // KALDIRILDI: 'Authorization': `Bearer ${token}` 
                 },
-                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }) // Sabitleme durumunu tersine çevir
+                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }) 
             });
 
             if (response.ok) {
@@ -59,11 +48,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    // --- YENİ EKLENDİ: Yayından Kaldırma (Unpublish) Fonksiyonu ---
+    // --- Yayından Kaldırma (Unpublish) Fonksiyonu ---
     const removePostFromSite = async (postId) => {
         if (!isAdmin) return alert('Yetkisiz işlem!');
 
-        // Yayından kaldırma işlemi için 'reject' (reddet) action'ı gönderiyoruz
         if (!confirm('DİKKAT: Bu gönderiyi ana sayfadan ve arşivden KALDIRMAK istediğinizden emin misiniz? (Admin Panelinde onay bekleyen olarak görünmeye devam edecektir)')) {
             return;
         }
@@ -73,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` 
+                    // KALDIRILDI: 'Authorization': `Bearer ${token}` 
                 },
                 body: JSON.stringify({ action: 'reject' }) // Durumu 'rejected' yap
             });
@@ -118,10 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     day: 'numeric'
                 });
                 
-                // Sabitleme butonu ve metni
                 const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
                 
-                // Admin Butonları HTML'i - Yayından Kaldır butonu eklendi
                 const adminControls = isAdmin ? `
                     <div class="admin-actions">
                         <button class="pin-toggle-btn" 
@@ -138,16 +124,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 ` : '';
 
+                // YENİ: XSS Koruması için DOMPurify kullan
+                const safeTitle = DOMPurify.sanitize(post.title);
+                const safeContent = DOMPurify.sanitize(post.content);
+                const safeAuthorEmail = DOMPurify.sanitize(post.author_email);
+
                 postElement.innerHTML = `
                     <div class="post-header">
-                        <h3>${post.title}</h3>
+                        <h3>${safeTitle}</h3>
                         <span class="category-tag">${post.category}</span>
                         ${post.is_pinned ? '<span class="pinned-badge">⭐ SABİTLENMİŞ</span>' : ''}
                         ${adminControls} 
                     </div>
-                    <p class="post-meta">Yayınlayan: ${post.author_email} (${date})</p>
+                    <p class="post-meta">Yayınlayan: ${safeAuthorEmail} (${date})</p>
                     <div class="post-content">
-                        ${post.content}
+                        ${safeContent}
                     </div>
                 `;
                 postsContainer.appendChild(postElement);
@@ -163,7 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 });
                 
-                // YENİ: Yayından Kaldır butonu dinleyicisi
                 postsContainer.querySelectorAll('.remove-btn').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const postId = btn.dataset.id;
