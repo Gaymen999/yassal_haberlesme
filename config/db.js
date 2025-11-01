@@ -8,27 +8,16 @@ const pool = new Pool({
 });
 
 const createTables = async () => {
-  // DEĞİŞTİ: users tablosuna yeni profil alanları eklendi
   const usersTableQuery = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
-      
-      -- YENİ: E-posta'dan ayrı, benzersiz bir kullanıcı adı
       username VARCHAR(50) UNIQUE NOT NULL, 
-      
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
       role VARCHAR(50) DEFAULT 'user' NOT NULL, 
-      
-      -- YENİ: Profil resmi URL'si (şimdilik varsayılan)
       avatar_url VARCHAR(255) DEFAULT 'default_avatar.png', 
-      
-      -- YENİ: Kullanıcı unvanı (örn: Yeni Üye, Technopat)
       title VARCHAR(50) DEFAULT 'Yeni Üye',
-      
-      -- YENİ: Toplam gönderi sayısı (daha sonra güncelleyeceğiz)
       post_count INTEGER DEFAULT 0,
-      
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
@@ -42,6 +31,7 @@ const createTables = async () => {
     );
   `;
 
+  // DEĞİŞTİ: "posts" tablosuna 'is_locked' kolonu eklendi
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -49,7 +39,11 @@ const createTables = async () => {
       content TEXT NOT NULL,
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-      is_pinned BOOLEAN DEFAULT FALSE NOT NULL,     
+      is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
+      
+      -- YENİ: Konu kilitli mi?
+      is_locked BOOLEAN DEFAULT FALSE NOT NULL,
+      
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
@@ -65,14 +59,13 @@ const createTables = async () => {
   `;
 
   try {
-    // Sıralama önemli: users tablosu önce oluşturulmalı
     await pool.query(usersTableQuery);
     await pool.query(categoriesTableQuery); 
     await pool.query(postsTableQuery); 
     await pool.query(repliesTableQuery); 
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
-  } catch (err) { // <--- HATA BURADA DÜZELTİLDİ
+  } catch (err) {
     console.error("Tablolar oluşturulurken hata:", err);
   }
 };

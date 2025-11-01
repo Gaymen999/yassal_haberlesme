@@ -77,3 +77,39 @@
         display: none; /* Mobilde detayları gizle */
     }
 }
+/* === KONU/CEVAP İÇİ MODERASYON BUTONLARI === */
+
+.admin-actions-reply {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    display: flex;
+    gap: 5px;
+}
+
+.admin-actions-reply button {
+    padding: 3px 8px;
+    font-size: 0.8em;
+    background-color: darkred;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.admin-actions-reply button:hover {
+    background-color: #c00;
+}
+
+/* .post-main-content'in position:relative olması lazım ki butonlar çalışsın */
+.post-main-content {
+    position: relative;
+    flex: 1; 
+    min-width: 300px; 
+    padding: 15px;
+}
+
+/* Silinme efekti için */
+#reply-transition {
+    transition: opacity 0.3s ease-out;
+}
