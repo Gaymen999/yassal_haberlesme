@@ -3,67 +3,42 @@ const { pool } = require('../config/db'); // DB bağlantısı
 const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware'); // İKİ KONTROL DE GEREKLİ
 const router = express.Router();
 
-// --- ADMİN ROTALARI ---
-// ÖNEMLİ: Bu dosyadaki tüm rotalar '/admin' öneki ile başlar.
-// Bu yüzden '/admin/pending-posts' yerine '/pending-posts' yazarız.
-// Ana index.js dosyasında bu öneki ekleyeceğiz.
+// --- MODERASYON ROTALARI ---
 
-// 1. Onay bekleyenleri getir (/admin/pending-posts)
-router.get('/pending-posts', [authenticateToken, authorizeAdmin], async (req, res) => {
-    try {
-        const pendingPosts = await pool.query("SELECT * FROM posts WHERE status = 'pending' ORDER BY created_at DESC");
-        res.json(pendingPosts.rows);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Sunucu Hatası');
-    }
-});
+// KALDIRILDI: Onay bekleyenleri getirme rotası (/pending-posts)
+// 'status' kolonu artık olmadığı için bu rota kaldırıldı.
 
-// 2. PAYLAŞIM GÜNCELLEME (/admin/posts/:id)
+// DEĞİŞTİ: PAYLAŞIM GÜNCELLEME (/admin/posts/:id)
+// Bu rota artık SADECE moderasyon işlemleri (sabitleme vb.) yapar.
 router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const { id } = req.params; 
-        const { action, category, is_pinned } = req.body; 
-        const adminId = req.user.id; 
+        // DEĞİŞTİ: 'action' ve 'category' kaldırıldı. Sadece 'is_pinned' kaldı.
+        const { is_pinned } = req.body; 
         
         const fields = [];
         const values = [];
         let paramIndex = 1;
 
-        if (action) {
-            if (!['approve', 'reject'].includes(action)) {
-                return res.status(400).json({ message: "Geçersiz işlem." });
-            }
-            const newStatus = action === 'approve' ? 'approved' : 'rejected';
-            fields.push(`status = $${paramIndex++}`);
-            values.push(newStatus);
-            fields.push(`approver_id = $${paramIndex++}`);
-            values.push(adminId);
-            fields.push(`approval_date = NOW()`);
-        }
+        // KALDIRILDI: 'action' (approve/reject) bloğu tamamen silindi.
+        // KALDIRILDI: 'category' bloğu silindi.
 
-        if (category !== undefined) {
-            fields.push(`category = $${paramIndex++}`);
-            values.push(category);
-        }
-        
         if (typeof is_pinned === 'boolean') { 
             fields.push(`is_pinned = $${paramIndex++}`);
             values.push(is_pinned);
+        } else {
+            // Eğer is_pinned dışında bir şey gelirse (veya hiçbir şey gelmezse)
+             return res.status(400).json({ message: "Güncellenecek geçerli alan bulunamadı. (Sadece is_pinned)" });
         }
         
-        if (fields.length === 0) {
-            return res.status(400).json({ message: "Güncellenecek alan bulunamadı." });
-        }
-
         values.push(id); 
         const queryText = `UPDATE posts SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
         const updatedPost = await pool.query(queryText, values);
 
         if (updatedPost.rows.length === 0) {
-            return res.status(404).json({ message: 'Paylaşım bulunamadı.' });
+            return res.status(404).json({ message: 'Konu bulunamadı.' });
         }
-        res.json({ message: `Paylaşım başarıyla güncellendi.`, post: updatedPost.rows[0] });
+        res.json({ message: `Konu başarıyla güncellendi.`, post: updatedPost.rows[0] });
 
     } catch (err) {
         console.error(err.message);
@@ -71,5 +46,4 @@ router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) =
     }
 });
 
-
-module.exports = router; // Bu rota grubunu export et
+module.exports = router;
