@@ -1,6 +1,5 @@
 const { Pool } = require('pg');
 
-// index.js'den veritabanı ayarlarını buraya taşıdık
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -8,7 +7,6 @@ const pool = new Pool({
   }
 });
 
-// index.js'den tablo oluşturma fonksiyonunu buraya taşıdık
 const createTables = async () => {
   const usersTableQuery = `
     CREATE TABLE IF NOT EXISTS users (
@@ -20,43 +18,58 @@ const createTables = async () => {
     );
   `;
   
+  // YENİ: "Kategoriler" tablosunun SQL tanımı
+  const categoriesTableQuery = `
+    CREATE TABLE IF NOT EXISTS categories (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL UNIQUE,
+      description TEXT,
+      -- URL dostu linkler için (örn: /forum/masaustu-bilgisayarlar)
+      slug VARCHAR(100) NOT NULL UNIQUE 
+    );
+  `;
+
+  // DEĞİŞTİ: "posts" tablosu artık "threads" (konular) olarak davranacak
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
       content TEXT NOT NULL,
-      author_id INTEGER NOT NULL REFERENCES users(id),
-      status VARCHAR(50) DEFAULT 'pending' NOT NULL, 
-      category VARCHAR(50) DEFAULT 'Genel' NOT NULL, 
+      
+      -- Konuyu açan kullanıcı
+      author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      
+      -- YENİ: Konunun hangi kategoriye ait olduğu
+      -- 'category' metin alanı kaldırıldı, yerine bu eklendi.
+      category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+
       is_pinned BOOLEAN DEFAULT FALSE NOT NULL,     
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      approver_id INTEGER REFERENCES users(id), 
-      approval_date TIMESTAMPTZ                
+      created_at TIMESTAMPTZ DEFAULT NOW()
+      
+      -- KALDIRILDI (Bir sonraki adımda kaldıracağız ama şimdiden sildim): 
+      -- status, approver_id, approval_date forumda olmayacak.
     );
   `;
 
-  // YENİ: "Cevaplar" tablosunun SQL tanımı
   const repliesTableQuery = `
     CREATE TABLE IF NOT EXISTS replies (
       id SERIAL PRIMARY KEY,
       content TEXT NOT NULL,
-      
-      -- Bu cevabın hangi konuya (thread/post) bağlı olduğu
-      -- ON DELETE CASCADE: Eğer ana konu (post) silinirse, bu cevaplar da otomatik silinir.
       thread_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-      
-      -- Bu cevabı hangi kullanıcının yazdığı
-      -- ON DELETE CASCADE: Eğer kullanıcı silinirse, bu cevapları da silinir.
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
 
   try {
     await pool.query(usersTableQuery);
+    
+    // YENİ: 'posts' tablosu 'categories' tablosuna bağlı olduğu için,
+    // ÖNCE 'categories' tablosunu oluşturmalıyız.
+    await pool.query(categoriesTableQuery); 
+    
     await pool.query(postsTableQuery); 
-    await pool.query(repliesTableQuery); // YENİ: Yeni tabloyu oluşturma komutu eklendi
+    await pool.query(repliesTableQuery); 
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
   } catch (err) {
@@ -64,8 +77,6 @@ const createTables = async () => {
   }
 };
 
-// Veritabanı havuzunu (pool) diğer dosyalarda kullanmak için export et
-// ve createTables fonksiyonunu sunucu başlarken çağır.
 module.exports = {
     pool,
     createTables
