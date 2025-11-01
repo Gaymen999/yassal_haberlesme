@@ -1,15 +1,16 @@
 const express = require('express');
-const { pool } = require('../config/db'); // DB bağlantısı
-const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware'); // İKİ KONTROL DE GEREKLİ
+const { pool } = require('../config/db');
+const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 // --- MODERASYON ROTALARI ---
 
-// Konu Güncelleme (Sabitleme)
+// DEĞİŞTİ: Konu Güncelleme (Sabitleme VE Kilitleme)
 router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const { id } = req.params; 
-        const { is_pinned } = req.body; 
+        // YENİ: 'is_locked' body'den alındı
+        const { is_pinned, is_locked } = req.body; 
         
         const fields = [];
         const values = [];
@@ -18,8 +19,16 @@ router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) =
         if (typeof is_pinned === 'boolean') { 
             fields.push(`is_pinned = $${paramIndex++}`);
             values.push(is_pinned);
-        } else {
-             return res.status(400).json({ message: "Güncellenecek geçerli alan bulunamadı. (Sadece is_pinned)" });
+        }
+        
+        // YENİ: is_locked için güncelleme mantığı eklendi
+        if (typeof is_locked === 'boolean') {
+            fields.push(`is_locked = $${paramIndex++}`);
+            values.push(is_locked);
+        }
+
+        if (fields.length === 0) {
+             return res.status(400).json({ message: "Güncellenecek geçerli alan bulunamadı. (is_pinned veya is_locked)" });
         }
         
         values.push(id); 
@@ -37,41 +46,32 @@ router.put('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) =
     }
 });
 
-// YENİ: Konu Silme (Tüm cevaplarıyla birlikte)
+// Konu Silme (Aynı kaldı)
 router.delete('/posts/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const { id } = req.params;
-        
-        // 'posts' tablosunda ON DELETE CASCADE ayarı olduğu için,
-        // biz konuyu sildiğimizde veritabanı otomatik olarak 
-        // bu konuya bağlı tüm cevapları (replies) da silecektir.
         const deletePost = await pool.query('DELETE FROM posts WHERE id = $1 RETURNING *', [id]);
 
         if (deletePost.rows.length === 0) {
             return res.status(404).json({ message: 'Silinecek konu bulunamadı.' });
         }
-        
         res.status(200).json({ message: `Konu (ID: ${id}) ve tüm cevapları başarıyla silindi.` });
-
     } catch (err) {
         console.error("Konu silinirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
 
-// YENİ: Tek Bir Cevabı Silme
+// Cevap Silme (Aynı kaldı)
 router.delete('/replies/:id', [authenticateToken, authorizeAdmin], async (req, res) => {
     try {
         const { id } = req.params;
-        
         const deleteReply = await pool.query('DELETE FROM replies WHERE id = $1 RETURNING *', [id]);
 
         if (deleteReply.rows.length === 0) {
             return res.status(404).json({ message: 'Silinecek cevap bulunamadı.' });
         }
-        
         res.status(200).json({ message: `Cevap (ID: ${id}) başarıyla silindi.` });
-
     } catch (err) {
         console.error("Cevap silinirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');

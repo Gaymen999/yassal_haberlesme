@@ -3,8 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const replyFormContainer = document.getElementById('reply-form-container');
     const loadingMessage = document.getElementById('loading-message');
     
-    // YENİ: Admin yetkisini globalde tutmak için
     let currentUserIsAdmin = false;
+    let currentThread = null; // YENİ: Konu bilgisini globalde tut
 
     const params = new URLSearchParams(window.location.search);
     const threadId = params.get('id');
@@ -27,16 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             const { thread, replies } = data;
+            
+            currentThread = thread; // YENİ: Konu bilgisini global değişkene ata
 
             document.title = thread.title;
             threadContainer.innerHTML = '';
             loadingMessage.style.display = 'none';
 
-            // ÖNCE: Giriş yapıp yapmadığını kontrol et (Admin yetkisini belirlemek için)
-            // renderReplies fonksiyonu 'currentUserIsAdmin' değişkenine göre buton gösterecek
-            await checkAuthAndRenderReplyForm();
-
-            // SONRA: İçeriği render et
+            await checkAuthAndRenderReplyForm(); // (Sıralama değişti)
             renderOriginalPost(thread);
             renderReplies(replies);
 
@@ -49,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Yardımcı Fonksiyonlar ---
 
-    function renderUserProfile(author) {
+    function renderUserProfile(author) { /* ... (içerik aynı) ... */ 
         const joinDate = new Date(author.author_join_date).toLocaleDateString('tr-TR');
         const safeUsername = DOMPurify.sanitize(author.author_username);
         const safeAvatar = DOMPurify.sanitize(author.author_avatar);
@@ -68,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
+    // DEĞİŞTİ: renderOriginalPost
     function renderOriginalPost(thread) {
         const postElement = document.createElement('div');
         postElement.className = 'original-post post-layout'; 
@@ -75,18 +74,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const safeTitle = DOMPurify.sanitize(thread.title);
         const safeContent = DOMPurify.sanitize(thread.content);
 
-        // YENİ: Admin ise Konuyu Sil/Kilitle butonları (Henüz sadece 'Sil' çalışıyor)
+        // YENİ: Kilit butonu metni
+        const lockButtonText = thread.is_locked ? 'Kilidi Aç' : 'Konuyu Kilitle';
+
         const adminControls = currentUserIsAdmin ? `
             <div class="admin-actions-reply">
+                <button class="lock-thread-btn" data-id="${thread.id}" data-locked="${thread.is_locked}" style="background-color: #f0ad4e;">
+                    ${lockButtonText}
+                </button>
                 <button class="delete-thread-btn" data-id="${thread.id}">Konuyu Sil</button>
             </div>
         ` : '';
 
+        // YENİ: Konu kilitliyse başlığa kilit ikonu ekle
+        const lockIcon = thread.is_locked ? '🔒 ' : '';
+
         postElement.innerHTML = `
             ${renderUserProfile(thread)} 
             <div class="post-main-content"> 
-                ${adminControls} <h2>${safeTitle}</h2>
-                <p class="post-meta">
+                ${adminControls} 
+                <h2>${lockIcon}${safeTitle}</h2> <p class="post-meta">
                     Tarih: ${date} | Kategori: <strong>${thread.category_name}</strong>
                 </p>
                 <div class="post-content">
@@ -96,16 +103,21 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         threadContainer.appendChild(postElement);
         
-        // YENİ: Konu silme butonu için olay dinleyici
         if (currentUserIsAdmin) {
             postElement.querySelector('.delete-thread-btn')?.addEventListener('click', (e) => {
                 const threadId = e.target.dataset.id;
                 handleDeleteThread(threadId, safeTitle);
             });
+            // YENİ: Kilitleme butonu için olay dinleyici
+            postElement.querySelector('.lock-thread-btn')?.addEventListener('click', (e) => {
+                const threadId = e.target.dataset.id;
+                const isLocked = e.target.dataset.locked === 'true';
+                handleToggleLockThread(threadId, !isLocked); // Tersini gönder
+            });
         }
     }
     
-    function renderReplies(replies) {
+    function renderReplies(replies) { /* ... (içerik aynı) ... */ 
         const repliesContainer = document.createElement('div');
         repliesContainer.className = 'replies-container';
         
@@ -116,12 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
             replies.forEach(reply => {
                 const replyElement = document.createElement('div');
                 replyElement.className = 'reply-card post-layout'; 
-                replyElement.id = `reply-${reply.id}`; // YENİ: Cevabı DOM'dan silmek için ID
+                replyElement.id = `reply-${reply.id}`; 
                 
                 const date = new Date(reply.created_at).toLocaleString('tr-TR');
                 const safeContent = DOMPurify.sanitize(reply.content);
                 
-                // YENİ: Admin ise Cevabı Sil butonu
                 const adminControls = currentUserIsAdmin ? `
                     <div class="admin-actions-reply">
                         <button class="delete-reply-btn" data-id="${reply.id}">Sil</button>
@@ -131,7 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 replyElement.innerHTML = `
                     ${renderUserProfile(reply)} 
                     <div class="post-main-content"> 
-                        ${adminControls} <p class="reply-meta">Tarih: ${date}</p>
+                        ${adminControls} 
+                        <p class="reply-meta">Tarih: ${date}</p>
                         <div class="reply-content">
                             ${safeContent}
                         </div>
@@ -142,7 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         threadContainer.appendChild(repliesContainer);
         
-        // YENİ: Tüm "Cevabı Sil" butonlarına olay dinleyici ekle
         if (currentUserIsAdmin) {
             repliesContainer.querySelectorAll('.delete-reply-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -153,14 +164,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // DEĞİŞTİ: Bu fonksiyon artık 'currentUserIsAdmin' değişkenini de ayarlıyor
+    // DEĞİŞTİ: checkAuthAndRenderReplyForm
     async function checkAuthAndRenderReplyForm() {
+        // YENİ: Konu kilitliyse formu hiç gösterme
+        if (currentThread && currentThread.is_locked) {
+            replyFormContainer.innerHTML = `
+                <div class="locked-message">
+                    🔒 Bu konu kilitlenmiştir. Yeni cevap yazılamaz.
+                </div>
+            `;
+            // Admin yetkisini yine de almamız lazım (silme butonları için)
+            try {
+                const res = await fetch('/api/user-status', { credentials: 'include' });
+                const data = await res.json();
+                if (data.loggedIn && data.user.role === 'admin') {
+                    currentUserIsAdmin = true;
+                }
+            } catch (error) { /* ignore */ }
+            return; // Fonksiyondan çık
+        }
+
+        // Konu kilitli değilse, normal kontrolü yap
         try {
             const res = await fetch('/api/user-status', { credentials: 'include' });
             const data = await res.json();
             
             if (data.loggedIn) {
-                // YENİ: Admin yetkisini kontrol et
                 if (data.user.role === 'admin') {
                     currentUserIsAdmin = true;
                 }
@@ -175,12 +204,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error('Kullanıcı durumu kontrol hatası:', error);
-            currentUserIsAdmin = false; // Hata durumunda yetkiyi kes
+            currentUserIsAdmin = false;
         }
     }
 
-    function renderReplyForm() {
-        // (Bu fonksiyonun içi aynı kaldı)
+    function renderReplyForm() { /* ... (içerik aynı) ... */ 
         replyFormContainer.innerHTML = `
             <form id="reply-form" class="reply-form">
                 <h3>Cevap Yaz</h3>
@@ -194,17 +222,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('reply-form').addEventListener('submit', handleReplySubmit);
     }
     
-    async function handleReplySubmit(e) {
-        // (Bu fonksiyonun içi aynı kaldı)
+    async function handleReplySubmit(e) { /* ... (içerik aynı) ... */ 
         e.preventDefault();
         const content = document.getElementById('reply-content').value;
         const messageElement = document.getElementById('reply-message');
 
-        if (!content) {
-            messageElement.textContent = 'Cevap boş olamaz.';
-            messageElement.style.color = 'red';
-            return;
-        }
+        if (!content) { /* ... */ return; }
 
         try {
             const response = await fetch(`/api/threads/${threadId}/reply`, {
@@ -219,7 +242,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 window.location.reload(); 
             } else {
-                throw new Error(data.message || 'Cevap gönderilemedi.');
+                // YENİ: Kilitli hatasını yakala
+                if (response.status === 403) {
+                    messageElement.textContent = 'Bu konu kilitlendiği için cevap gönderilemedi.';
+                } else {
+                    throw new Error(data.message || 'Cevap gönderilemedi.');
+                }
             }
 
         } catch (error) {
@@ -228,8 +256,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // YENİ: Cevap Silme Fonksiyonu
-    async function handleDeleteReply(replyId) {
+    // (handleDeleteReply fonksiyonu aynı kaldı)
+    async function handleDeleteReply(replyId) { /* ... (içerik aynı) ... */ 
         if (!confirm("Bu cevabı kalıcı olarak silmek istediğinizden emin misiniz?")) {
             return;
         }
@@ -237,14 +265,13 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(`/admin/replies/${replyId}`, {
                 method: 'DELETE',
-                credentials: 'include' // Admin cookie'mizi gönder
+                credentials: 'include'
             });
 
             if (response.ok) {
-                // Sayfayı yenilemek yerine silinen cevabı DOM'dan kaldır
                 const replyElement = document.getElementById(`reply-${replyId}`);
                 if (replyElement) {
-                    replyElement.style.opacity = '0'; // Silinme efekti
+                    replyElement.style.opacity = '0';
                     setTimeout(() => replyElement.remove(), 300);
                 }
             } else {
@@ -257,8 +284,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // YENİ: Konu Silme Fonksiyonu (thread.html içinden)
-    async function handleDeleteThread(threadId, postTitle) {
+    // (handleDeleteThread fonksiyonu aynı kaldı)
+    async function handleDeleteThread(threadId, postTitle) { /* ... (içerik aynı) ... */ 
         if (!confirm(`DİKKAT! "${postTitle}" başlıklı konuyu ve TÜM CEVAPLARINI kalıcı olarak silmek istediğinizden emin misiniz?`)) {
             return;
         }
@@ -271,7 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok) {
                 alert('Konu ve tüm cevapları başarıyla silindi.');
-                // Konu silindiği için ana sayfaya yönlendir
                 window.location.href = '/'; 
             } else {
                 const data = await response.json();
@@ -279,6 +305,34 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error('Konu silme hatası:', error);
+            alert('Sunucuya bağlanılamadı.');
+        }
+    }
+
+    // YENİ: Konu Kilitleme/Açma Fonksiyonu
+    async function handleToggleLockThread(threadId, newLockStatus) {
+        const actionText = newLockStatus ? 'kilitlemek' : 'kilidini açmak';
+        if (!confirm(`Bu konuyu ${actionText} istediğinizden emin misiniz?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/posts/${threadId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_locked: newLockStatus }),
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                alert(`Konu başarıyla ${newLockStatus ? 'kilitlendi' : 'kilidi açıldı'}.`);
+                window.location.reload(); // Sayfayı yenile (buton ve formun güncellenmesi için)
+            } else {
+                const data = await response.json();
+                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
+            }
+        } catch (error) {
+            console.error('Konu kilitleme hatası:', error);
             alert('Sunucuya bağlanılamadı.');
         }
     }

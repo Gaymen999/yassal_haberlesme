@@ -113,3 +113,24 @@
 #reply-transition {
     transition: opacity 0.3s ease-out;
 }
+
+/* === KONU KİLİTLEME === */
+
+/* Kilitli konu uyarı mesajı (cevap formu yerine) */
+.locked-message {
+    text-align: center;
+    padding: 20px;
+    background-color: #fcf8e3; /* Sarı uyarı */
+    border: 1px solid #faebcc;
+    border-radius: 5px;
+    font-weight: bold;
+    color: #8a6d3b;
+}
+
+/* Kilitleme butonu (turuncu) */
+.admin-actions-reply button.lock-thread-btn {
+    background-color: #f0ad4e; /* Turuncu */
+}
+.admin-actions-reply button.lock-thread-btn:hover {
+    background-color: #ec971f;
+}

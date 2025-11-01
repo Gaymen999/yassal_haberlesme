@@ -1,11 +1,11 @@
 const express = require('express');
-const { pool } = require('../config/db'); // DB bağlantısı
-const { authenticateToken } = require('../middleware/authMiddleware'); // Sadece token kontrolü
+const { pool } = require('../config/db');
+const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 // --- KATEGORİ ROTALARI ---
 // (Bu rotalar değişmedi, aynı kalıyor)
-router.get('/api/categories', async (req, res) => {
+router.get('/api/categories', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
         res.json(categories.rows);
@@ -14,8 +14,7 @@ router.get('/api/categories', async (req, res) => {
         res.status(500).send('Sunucu Hatası');
     }
 });
-
-router.get('/api/categories/:slug', async (req, res) => {
+router.get('/api/categories/:slug', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const { slug } = req.params;
         const postsInCategory = await pool.query(`
@@ -23,8 +22,6 @@ router.get('/api/categories/:slug', async (req, res) => {
                 p.id, p.title, p.is_pinned, p.created_at, 
                 c.name AS category_name,
                 c.slug AS category_slug,
-                
-                -- DEĞİŞTİ: Kullanıcı bilgileri e-posta yerine profil oldu
                 u.username AS author_username,
                 u.avatar_url AS author_avatar
             FROM posts p
@@ -48,7 +45,7 @@ router.get('/api/categories/:slug', async (req, res) => {
 // --- KONU (THREAD/POST) ROTALARI ---
 
 // Yeni Konu Açma (/posts) (Aynı kaldı)
-router.post('/posts', authenticateToken, async (req, res) => { 
+router.post('/posts', authenticateToken, async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const { title, content, category_id } = req.body; 
         const authorId = req.user.id; 
@@ -62,8 +59,6 @@ router.post('/posts', authenticateToken, async (req, res) => {
             [title, content, category_id, authorId]
         );
         
-        // YENİ: Konu açan kullanıcının post_count'unu artır
-        // (Bu bir sonraki adımda da yapılabilirdi ama şimdi eklemek mantıklı)
         await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [authorId]);
 
         res.status(201).json({ 
@@ -79,16 +74,14 @@ router.post('/posts', authenticateToken, async (req, res) => {
     }
 });
 
-// DEĞİŞTİ: Ana Sayfa Konu Listeleme (/api/posts)
-router.get('/api/posts', async (req, res) => {
+// Ana Sayfa Konu Listeleme (/api/posts) (Aynı kaldı)
+router.get('/api/posts', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const approvedPosts = await pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.is_pinned, p.created_at, 
                 c.name AS category_name, 
                 c.slug AS category_slug,
-                
-                -- DEĞİŞTİ: Profil bilgileri eklendi
                 u.username AS author_username,
                 u.avatar_url AS author_avatar
             FROM posts p
@@ -103,16 +96,14 @@ router.get('/api/posts', async (req, res) => {
     }
 });
 
-// DEĞİŞTİ: Arşiv Listeleme (/api/archive-posts)
-router.get('/api/archive-posts', async (req, res) => {
+// Arşiv Listeleme (/api/archive-posts) (Aynı kaldı)
+router.get('/api/archive-posts', async (req, res) => { /* ... (içerik aynı) ... */ 
     try {
         const archivedPosts = await pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.created_at, 
                 c.name AS category_name,
                 c.slug AS category_slug,
-                
-                -- DEĞİŞTİ: Profil bilgileri eklendi
                 u.username AS author_username
             FROM posts p
             JOIN users u ON p.author_id = u.id
@@ -126,18 +117,16 @@ router.get('/api/archive-posts', async (req, res) => {
     }
 });
 
-// DEĞİŞTİ: Tek bir konuyu ve TÜM cevaplarını getir
+// DEĞİŞTİ: Tek bir konuyu getir (/api/threads/:id)
 router.get('/api/threads/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
-        // 1. Konunun ana bilgisini çek
+        // 1. Konunun ana bilgisini çek (YENİ: 'is_locked' eklendi)
         const threadQuery = pool.query(`
             SELECT 
-                p.id, p.title, p.content, p.created_at, 
+                p.id, p.title, p.content, p.created_at, p.is_locked, 
                 c.name AS category_name,
-                
-                -- DEĞİŞTİ: Konu sahibinin tam profil bilgisi
                 u.username AS author_username,
                 u.avatar_url AS author_avatar,
                 u.title AS author_title,
@@ -149,12 +138,10 @@ router.get('/api/threads/:id', async (req, res) => {
             WHERE p.id = $1;
         `, [id]);
 
-        // 2. Konuya ait tüm cevapları çek
+        // 2. Konuya ait tüm cevapları çek (Aynı kaldı)
         const repliesQuery = pool.query(`
             SELECT 
                 r.id, r.content, r.created_at,
-                
-                -- DEĞİŞTİ: Cevap sahibinin tam profil bilgisi
                 u.username AS author_username,
                 u.avatar_url AS author_avatar,
                 u.title AS author_title,
@@ -186,7 +173,7 @@ router.get('/api/threads/:id', async (req, res) => {
 
 // --- CEVAP (REPLY) ROTALARI ---
 
-// DEĞİŞTİ: Bir konuya cevap yazma
+// DEĞİŞTİ: Bir konuya cevap yazma (/api/threads/:id/reply)
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     try {
         const { id: threadId } = req.params; 
@@ -196,13 +183,22 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
         if (!content) {
             return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
         }
-
+        
+        // YENİ: Konu kilitli mi diye kontrol et
+        const threadCheck = await pool.query('SELECT is_locked FROM posts WHERE id = $1', [threadId]);
+        if (threadCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'Konu bulunamadı.' });
+        }
+        if (threadCheck.rows[0].is_locked) {
+            // 403 Forbidden - Kilitli konuya cevap atılamaz
+            return res.status(403).json({ message: 'Bu konu kilitlenmiştir, yeni cevap yazılamaz.' }); 
+        }
+        
         const newReply = await pool.query(
             'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING *',
             [content, threadId, authorId]
         );
         
-        // YENİ: Cevap yazan kullanıcının post_count'unu artır
         await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [authorId]);
 
         res.status(201).json({
