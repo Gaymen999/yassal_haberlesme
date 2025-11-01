@@ -34,7 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
             threadContainer.innerHTML = '';
             loadingMessage.style.display = 'none';
 
-            await checkAuthAndRenderReplyForm(); // (Sıralama değişti)
+            // DEĞİŞTİ: Önce yetkiyi kontrol et, sonra render et
+            await checkAuthAndRenderReplyForm(); 
             renderOriginalPost(thread);
             renderReplies(replies);
 
@@ -47,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Yardımcı Fonksiyonlar ---
 
-    function renderUserProfile(author) { /* ... (içerik aynı) ... */ 
+    function renderUserProfile(author) { 
         const joinDate = new Date(author.author_join_date).toLocaleDateString('tr-TR');
         const safeUsername = DOMPurify.sanitize(author.author_username);
         const safeAvatar = DOMPurify.sanitize(author.author_avatar);
@@ -117,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    function renderReplies(replies) { /* ... (içerik aynı) ... */ 
+    function renderReplies(replies) { 
         const repliesContainer = document.createElement('div');
         repliesContainer.className = 'replies-container';
         
@@ -167,6 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // DEĞİŞTİ: checkAuthAndRenderReplyForm
     async function checkAuthAndRenderReplyForm() {
         // YENİ: Konu kilitliyse formu hiç gösterme
+        // (currentThread'in fetchThreadAndReplies içinde dolduğundan emin olmalıyız)
         if (currentThread && currentThread.is_locked) {
             replyFormContainer.innerHTML = `
                 <div class="locked-message">
@@ -208,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderReplyForm() { /* ... (içerik aynı) ... */ 
+    function renderReplyForm() { 
         replyFormContainer.innerHTML = `
             <form id="reply-form" class="reply-form">
                 <h3>Cevap Yaz</h3>
@@ -222,12 +224,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('reply-form').addEventListener('submit', handleReplySubmit);
     }
     
-    async function handleReplySubmit(e) { /* ... (içerik aynı) ... */ 
+    async function handleReplySubmit(e) { 
         e.preventDefault();
         const content = document.getElementById('reply-content').value;
         const messageElement = document.getElementById('reply-message');
 
-        if (!content) { /* ... */ return; }
+        if (!content) { 
+            messageElement.textContent = 'Cevap boş olamaz.';
+            messageElement.style.color = 'red';
+            return; 
+        }
 
         try {
             const response = await fetch(`/api/threads/${threadId}/reply`, {
@@ -245,6 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // YENİ: Kilitli hatasını yakala
                 if (response.status === 403) {
                     messageElement.textContent = 'Bu konu kilitlendiği için cevap gönderilemedi.';
+                    messageElement.style.color = 'red';
                 } else {
                     throw new Error(data.message || 'Cevap gönderilemedi.');
                 }
@@ -256,8 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // (handleDeleteReply fonksiyonu aynı kaldı)
-    async function handleDeleteReply(replyId) { /* ... (içerik aynı) ... */ 
+    async function handleDeleteReply(replyId) { 
         if (!confirm("Bu cevabı kalıcı olarak silmek istediğinizden emin misiniz?")) {
             return;
         }
@@ -284,8 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // (handleDeleteThread fonksiyonu aynı kaldı)
-    async function handleDeleteThread(threadId, postTitle) { /* ... (içerik aynı) ... */ 
+    async function handleDeleteThread(threadId, postTitle) { 
         if (!confirm(`DİKKAT! "${postTitle}" başlıklı konuyu ve TÜM CEVAPLARINI kalıcı olarak silmek istediğinizden emin misiniz?`)) {
             return;
         }

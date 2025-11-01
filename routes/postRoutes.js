@@ -5,7 +5,7 @@ const router = express.Router();
 
 // --- KATEGORİ ROTALARI ---
 // (Bu rotalar değişmedi, aynı kalıyor)
-router.get('/api/categories', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/categories', async (req, res) => { 
     try {
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
         res.json(categories.rows);
@@ -14,7 +14,7 @@ router.get('/api/categories', async (req, res) => { /* ... (içerik aynı) ... *
         res.status(500).send('Sunucu Hatası');
     }
 });
-router.get('/api/categories/:slug', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/categories/:slug', async (req, res) => { 
     try {
         const { slug } = req.params;
         const postsInCategory = await pool.query(`
@@ -45,7 +45,7 @@ router.get('/api/categories/:slug', async (req, res) => { /* ... (içerik aynı)
 // --- KONU (THREAD/POST) ROTALARI ---
 
 // Yeni Konu Açma (/posts) (Aynı kaldı)
-router.post('/posts', authenticateToken, async (req, res) => { /* ... (içerik aynı) ... */ 
+router.post('/posts', authenticateToken, async (req, res) => { 
     try {
         const { title, content, category_id } = req.body; 
         const authorId = req.user.id; 
@@ -75,7 +75,7 @@ router.post('/posts', authenticateToken, async (req, res) => { /* ... (içerik a
 });
 
 // Ana Sayfa Konu Listeleme (/api/posts) (Aynı kaldı)
-router.get('/api/posts', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/posts', async (req, res) => { 
     try {
         const approvedPosts = await pool.query(`
             SELECT 
@@ -97,7 +97,7 @@ router.get('/api/posts', async (req, res) => { /* ... (içerik aynı) ... */
 });
 
 // Arşiv Listeleme (/api/archive-posts) (Aynı kaldı)
-router.get('/api/archive-posts', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/archive-posts', async (req, res) => { 
     try {
         const archivedPosts = await pool.query(`
             SELECT 
