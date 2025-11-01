@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path'); 
 const cookieParser = require('cookie-parser');
-const cors = require('cors'); // <-- YENİ: CORS kütüphanesini import et
+const cors = require('cors'); 
 const { createTables } = require('./config/db'); 
 
 // Rota dosyalarını import et
@@ -14,19 +14,17 @@ const PORT = process.env.PORT || 3000;
 
 // --- GENEL MIDDLEWARE'LER ---
 
-// YENİ: CORS Middleware'ini EN BAŞA ekle
-// Bu, OPTIONS isteklerini otomatik olarak ele alacak.
+// DÜZELTME: origin'i bir dizi (array) olarak güncelle
 app.use(cors({
-    origin: 'http://localhost:3000', // Sadece senin frontend'inden gelen isteklere izin ver
-    credentials: true                // Cookie'lerin (HttpOnly) gönderilebilmesi için şart
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], // Hem localhost hem IP'ye izin ver
+    credentials: true                
 }));
 
-app.use(express.json()); // Body'deki JSON'ları okumak için
-app.use(cookieParser()); // Cookie'leri okumak için
-app.use(express.static(path.join(__dirname, 'public'))); // Frontend dosyalarını sunmak için
+app.use(express.json()); 
+app.use(cookieParser()); 
+app.use(express.static(path.join(__dirname, 'public'))); 
 
 // --- ROTA YÖNLENDİRMELERİ ---
-// (CORS'tan SONRA gelmeliler)
 app.use('/', authRoutes);     
 app.use('/', postRoutes);   
 app.use('/admin', adminRoutes); 

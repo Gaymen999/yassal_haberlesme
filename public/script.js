@@ -1,12 +1,11 @@
-// Helper function (decodeToken) buradan kaldırıldı, artık /api/user-status kullanılıyor.
-
-document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
+document.addEventListener('DOMContentLoaded', async () => { 
     const postsContainer = document.getElementById('posts-container');
     let isAdmin = false;
 
-    // YENİ: Token veya rolü localStorage'dan okumak yerine sunucuya sor
     try {
-        const response = await fetch('/api/user-status');
+        const response = await fetch('/api/user-status', {
+            credentials: 'include' // DÜZELTME
+        });
         const data = await response.json();
         if (data.loggedIn && data.user.role === 'admin') {
             isAdmin = true;
@@ -29,14 +28,14 @@ document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    // KALDIRILDI: 'Authorization': `Bearer ${token}` 
                 },
-                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }) 
+                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
+                credentials: 'include' // DÜZELTME
             });
 
             if (response.ok) {
                 alert(`Paylaşım başarıyla ${isCurrentlyPinned ? 'Sabitlemesi Kaldırıldı' : 'Sabitlendi'}!`);
-                fetchPosts(); // Listeyi yeniden çek ve güncelle
+                fetchPosts(); 
             } else {
                 const data = await response.json();
                 alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
@@ -52,7 +51,7 @@ document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
     const removePostFromSite = async (postId) => {
         if (!isAdmin) return alert('Yetkisiz işlem!');
 
-        if (!confirm('DİKKAT: Bu gönderiyi ana sayfadan ve arşivden KALDIRMAK istediğinizden emin misiniz? (Admin Panelinde onay bekleyen olarak görünmeye devam edecektir)')) {
+        if (!confirm('DİKKAT: Bu gönderiyi ana sayfadan ve arşivden KALDIRMAK istediğinizden emin misiniz?')) {
             return;
         }
         
@@ -61,14 +60,14 @@ document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    // KALDIRILDI: 'Authorization': `Bearer ${token}` 
                 },
-                body: JSON.stringify({ action: 'reject' }) // Durumu 'rejected' yap
+                body: JSON.stringify({ action: 'reject' }),
+                credentials: 'include' // DÜZELTME
             });
 
             if (response.ok) {
                 alert('Paylaşım başarıyla yayından kaldırıldı!');
-                fetchPosts(); // Listeyi yeniden çek ve güncelle
+                fetchPosts(); 
             } else {
                 const data = await response.json();
                 alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
@@ -84,7 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
     // --- Duyuruları Çeken Ana Fonksiyon ---
     const fetchPosts = async () => {
         try {
-            const response = await fetch('/api/posts');
+            const response = await fetch('/api/posts'); // Buna gerek yok, public rota
             if (!response.ok) throw new Error('Duyurular yüklenirken bir hata oluştu: ' + response.statusText);
 
             const posts = await response.json();
@@ -124,7 +123,6 @@ document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
                     </div>
                 ` : '';
 
-                // YENİ: XSS Koruması için DOMPurify kullan
                 const safeTitle = DOMPurify.sanitize(post.title);
                 const safeContent = DOMPurify.sanitize(post.content);
                 const safeAuthorEmail = DOMPurify.sanitize(post.author_email);
@@ -144,7 +142,6 @@ document.addEventListener('DOMContentLoaded', async () => { // async yapıldı
                 postsContainer.appendChild(postElement);
             });
             
-            // Sadece Admin ise buton olay dinleyicilerini ekle
             if (isAdmin) {
                 postsContainer.querySelectorAll('.pin-toggle-btn').forEach(btn => {
                     btn.addEventListener('click', () => {
