@@ -391,3 +391,25 @@
     border: 1px dashed #ddd;
     border-radius: 5px;
 }
+
+/* === ANA SAYFA KONU İSTATİSTİKLERİ === */
+
+.post-card .post-footer {
+    display: flex;
+    justify-content: space-between; /* Metayı sola, istatistikleri sağa yasla */
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 5px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.post-card .post-meta {
+    margin: 0; /* Paragrafın varsayılan margin'ini sıfırla */
+}
+
+.post-stats {
+    display: flex;
+    gap: 15px;
+    font-size: 0.9em;
+    color: #555;
+}

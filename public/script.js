@@ -1,13 +1,19 @@
 // public/script.js
 document.addEventListener('DOMContentLoaded', async () => { 
     const postsContainer = document.getElementById('posts-container');
-    // YENİ: Yeni buton konteynerini seç
     const newPostButtonContainer = document.getElementById('new-post-button-container');
     
-    let isAdmin = false;
-    let isLoggedIn = false; // YENİ: Giriş durumunu tut
+    // YENİ: Sayfalama konteynerleri
+    const paginationContainerTop = document.getElementById('pagination-container-top');
+    const paginationContainerBottom = document.getElementById('pagination-container-bottom');
 
-    // Kullanıcı durumunu kontrol et (Admin mi? Giriş yapmış mı?)
+    // YENİ: URL'den mevcut sayfayı al
+    const params = new URLSearchParams(window.location.search);
+    const currentPage = parseInt(params.get('page'), 10) || 1;
+    
+    let isAdmin = false;
+    let isLoggedIn = false; 
+
     try {
         const response = await fetch('/api/user-status', {
             credentials: 'include' 
@@ -15,36 +21,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         const data = await response.json();
         
         if (data.loggedIn) {
-            isLoggedIn = true; // YENİ
+            isLoggedIn = true; 
             if (data.user.role === 'admin') {
                 isAdmin = true;
             }
         }
-        
-        // YENİ: Giriş durumuna göre "Yeni Konu Aç" butonunu render et
         renderNewPostButton();
-
     } catch (error) {
         console.warn('Kullanıcı durumu kontrol edilemedi.');
-        // Giriş yapmamış gibi devam et
         renderNewPostButton();
     }
     
-    // --- YENİ: "Yeni Konu Aç" Butonunu Render Etme Fonksiyonu ---
     const renderNewPostButton = () => {
         if (isLoggedIn) {
-            newPostButtonContainer.innerHTML = `
-                <a href="submit.html" class="new-post-btn">Yeni Konu Aç</a>
-            `;
+            newPostButtonContainer.innerHTML = `<a href="submit.html" class="new-post-btn">Yeni Konu Aç</a>`;
         } else {
-            // Giriş yapmamışsa bir şey gösterme veya mesaj göster
-             newPostButtonContainer.innerHTML = `
-                <p class="login-prompt">Konu açmak için lütfen <a href="login.html">giriş yapın</a>.</p>
-            `;
+             newPostButtonContainer.innerHTML = `<p class="login-prompt">Konu açmak için lütfen <a href="login.html">giriş yapın</a>.</p>`;
         }
     };
 
-    // --- Moderasyon Fonksiyonları (Aynı kaldı) ---
     const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
         if (!isAdmin) return alert('Yetkisiz işlem!');
         const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
@@ -71,21 +66,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
     
-    // --- Konuları Çeken Ana Fonksiyon ---
+    // YENİ: Sayfalama Linklerini Oluşturan Fonksiyon
+    const renderPagination = (pagination) => {
+        const { currentPage, totalPages } = pagination;
+        
+        // Temizle
+        paginationContainerTop.innerHTML = '';
+        paginationContainerBottom.innerHTML = '';
+
+        if (totalPages <= 1) return; // Sayfalama gerekmiyorsa
+
+        let paginationHTML = '';
+        
+        if (currentPage > 1) {
+            paginationHTML += `<a href="/index.html?page=${currentPage - 1}" class="page-link prev">Önceki</a>`;
+        }
+        if (currentPage > 2) {
+             paginationHTML += `<a href="/index.html?page=1" class="page-link">1</a>`;
+             if (currentPage > 3) paginationHTML += `<span class="page-dots">...</span>`;
+        }
+        if (currentPage > 1) {
+             paginationHTML += `<a href="/index.html?page=${currentPage - 1}" class="page-link">${currentPage - 1}</a>`;
+        }
+        
+        paginationHTML += `<span class="page-link current">${currentPage}</span>`;
+        
+        if (currentPage < totalPages) {
+            paginationHTML += `<a href="/index.html?page=${currentPage + 1}" class="page-link">${currentPage + 1}</a>`;
+        }
+        if (currentPage < totalPages - 1) {
+            if (currentPage < totalPages - 2) paginationHTML += `<span class="page-dots">...</span>`;
+            paginationHTML += `<a href="/index.html?page=${totalPages}" class="page-link">${totalPages}</a>`;
+        }
+        if (currentPage < totalPages) {
+            paginationHTML += `<a href="/index.html?page=${currentPage + 1}" class="page-link next">Sonraki</a>`;
+        }
+        
+        paginationContainerTop.innerHTML = paginationHTML;
+        paginationContainerBottom.innerHTML = paginationHTML;
+    }
+
+    // DEĞİŞTİ: Konuları Çeken Ana Fonksiyon (Sayfalama eklendi)
     const fetchPosts = async () => {
         try {
-            // TODO: Bu API rotasını da (/api/posts) sayfalama için güncellememiz gerekecek.
-            // Şimdilik aynı bırakıyorum.
-            const response = await fetch('/api/posts', { credentials: 'include' });
+            // YENİ: API'ye ?page= parametresini gönder
+            const response = await fetch(`/api/posts?page=${currentPage}`, { credentials: 'include' });
             if (!response.ok) throw new Error('Konular yüklenirken bir hata oluştu: ' + response.statusText);
 
-            const posts = await response.json();
+            const data = await response.json(); // API artık { posts: [], pagination: {} } döndürüyor
+            const { posts, pagination } = data;
+            
             postsContainer.innerHTML = ''; 
 
             if (posts.length === 0) {
                 postsContainer.innerHTML = '<p>Şu an yayınlanmış konu bulunmamaktadır.</p>';
                 return;
             }
+            
+            // YENİ: Sayfalama linklerini render et
+            renderPagination(pagination);
 
             posts.forEach(post => {
                 const postElement = document.createElement('div');
@@ -93,9 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (post.is_pinned) postElement.classList.add('pinned');
 
                 const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
+                    year: 'numeric', month: 'long', day: 'numeric'
                 });
                 
                 const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
@@ -115,8 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
                 const safeCategoryName = DOMPurify.sanitize(post.category_name);
 
-                // DEĞİŞTİ: Ana sayfadan post.content'i kaldırdım,
-                // sadece başlık, yazar ve kategori (Technopat gibi)
+                // YENİ: Cevap ve Beğeni sayıları eklendi
                 postElement.innerHTML = `
                     <div class="post-header">
                         <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
@@ -125,12 +161,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                         ${adminControls} 
                     </div>
                     
-                    <p class="post-meta">Yayınlayan: ${safeAuthorUsername} (${date})</p>
+                    <div class="post-footer">
+                         <p class="post-meta">Yayınlayan: ${safeAuthorUsername} (${date})</p>
+                         <div class="post-stats">
+                            <span>Cevap: ${post.reply_count || 0}</span>
+                            <span>Beğeni: ${post.like_count || 0}</span>
+                         </div>
+                    </div>
                 `;
                 postsContainer.appendChild(postElement);
             });
             
-            // Olay dinleyicileri (Aynı kaldı)
             if (isAdmin) {
                 postsContainer.querySelectorAll('.pin-toggle-btn').forEach(btn => {
                     btn.addEventListener('click', () => {

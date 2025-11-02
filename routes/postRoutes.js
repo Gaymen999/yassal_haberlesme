@@ -3,6 +3,8 @@ const { pool } = require('../config/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
+// DEĞİŞTİ: Sabitler eklendi
+const POSTS_PER_PAGE = 20; 
 const REPLIES_PER_PAGE = 20;
 
 // --- KATEGORİ ROTALARI ---
@@ -19,6 +21,7 @@ router.get('/api/categories', async (req, res) => {
 router.get('/api/categories/:slug', async (req, res) => { 
     try {
         const { slug } = req.params;
+        // TODO: Bu kategori sayfası rotasını da sayfalamak gerekecek.
         const postsInCategory = await pool.query(`
             SELECT 
                 p.id, p.title, p.is_pinned, p.created_at, 
@@ -71,23 +74,71 @@ router.post('/posts', authenticateToken, async (req, res) => {
     }
 });
 
-// Ana Sayfa Konu Listeleme (/api/posts) (Aynı kaldı)
+// DEĞİŞTİ: Ana Sayfa Konu Listeleme (/api/posts) - SAYFALAMA EKLENDİ
 router.get('/api/posts', async (req, res) => { 
     try {
-        // TODO: Buraya da reaksiyon sayısı eklenecek (bir sonraki adımda)
-        const approvedPosts = await pool.query(`
+        const page = parseInt(req.query.page, 10) || 1;
+        const offset = (page - 1) * POSTS_PER_PAGE;
+
+        // 1. Toplam konu sayısını çek (sabitlenmemiş olanları)
+        const totalPostsQuery = pool.query('SELECT COUNT(*) FROM posts WHERE is_pinned = false');
+        
+        // 2. Sabitlenmiş konuları çek (bunlar sayfalama dışıdır, her zaman en üstte)
+        const pinnedPostsQuery = pool.query(`
             SELECT 
-                p.id, p.title, p.content, p.is_pinned, p.created_at, 
-                c.name AS category_name, 
-                c.slug AS category_slug,
-                u.username AS author_username,
-                u.avatar_url AS author_avatar
+                p.id, p.title, p.is_pinned, p.created_at, 
+                c.name AS category_name, c.slug AS category_slug,
+                u.username AS author_username, u.avatar_url AS author_avatar,
+                (SELECT COUNT(*) FROM replies r WHERE r.thread_id = p.id) AS reply_count,
+                (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
-            ORDER BY p.is_pinned DESC, p.created_at DESC; 
+            WHERE p.is_pinned = true
+            ORDER BY p.created_at DESC;
         `);
-        res.json(approvedPosts.rows);
+
+        // 3. Sayfalanmış normal konuları çek
+        const postsQuery = pool.query(`
+            SELECT 
+                p.id, p.title, p.is_pinned, p.created_at, 
+                c.name AS category_name, c.slug AS category_slug,
+                u.username AS author_username, u.avatar_url AS author_avatar,
+                (SELECT COUNT(*) FROM replies r WHERE r.thread_id = p.id) AS reply_count,
+                (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count
+            FROM posts p
+            JOIN users u ON p.author_id = u.id
+            JOIN categories c ON p.category_id = c.id
+            WHERE p.is_pinned = false
+            ORDER BY p.created_at DESC
+            LIMIT $1 OFFSET $2;
+        `, [POSTS_PER_PAGE, offset]);
+
+        // Sorguları paralel çalıştır
+        const [totalResult, pinnedResult, postsResult] = await Promise.all([
+            totalPostsQuery,
+            pinnedPostsQuery,
+            postsQuery
+        ]);
+
+        const totalPosts = parseInt(totalResult.rows[0].count, 10);
+        const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE);
+        
+        // Sabitlenmiş konuları ve normal konuları birleştir
+        const allPosts = [
+            ...pinnedResult.rows,
+            ...postsResult.rows
+        ];
+        
+        res.json({
+            posts: allPosts,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalPosts: totalPosts
+            }
+        });
+
     } catch (err) {
         console.error("Konuları getirirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
@@ -115,14 +166,14 @@ router.get('/api/archive-posts', async (req, res) => {
     }
 });
 
-// DEĞİŞTİ: Tek bir konuyu getir (/api/threads/:id)
+// Tek bir konuyu getir (/api/threads/:id) (Aynı kaldı)
 router.get('/api/threads/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const page = parseInt(req.query.page, 10) || 1;
         const offset = (page - 1) * REPLIES_PER_PAGE;
 
-        // 1. Konunun ana bilgisini çek (DEĞİŞTİ: Reaksiyon bilgisi eklendi)
+        // 1. Konunun ana bilgisini çek (Reaksiyon bilgisi eklendi)
         const threadQuery = pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.created_at, p.is_locked, p.best_reply_id, p.author_id,
@@ -133,9 +184,7 @@ router.get('/api/threads/:id', async (req, res) => {
                 u.post_count AS author_post_count,
                 u.created_at AS author_join_date,
                 
-                -- YENİ: Toplam beğeni sayısı
                 (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count,
-                -- YENİ: Beğenen kullanıcı ID'lerinin listesi (frontend kontrolü için)
                 (SELECT ARRAY_AGG(tr.user_id) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS liked_by_users
 
             FROM posts p
@@ -144,7 +193,7 @@ router.get('/api/threads/:id', async (req, res) => {
             WHERE p.id = $1;
         `, [id]);
 
-        // 2. Sayfalanmış cevapları çek (DEĞİŞTİ: Reaksiyon bilgisi eklendi)
+        // 2. Sayfalanmış cevapları çek (Reaksiyon bilgisi eklendi)
         const repliesQuery = pool.query(`
             SELECT 
                 r.id, r.content, r.created_at,
@@ -154,9 +203,7 @@ router.get('/api/threads/:id', async (req, res) => {
                 u.post_count AS author_post_count,
                 u.created_at AS author_join_date,
 
-                -- YENİ: Toplam beğeni sayısı
                 (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
-                -- YENİ: Beğenen kullanıcı ID'lerinin listesi
                 (SELECT ARRAY_AGG(rr.user_id) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS liked_by_users
 
             FROM replies r
@@ -200,7 +247,6 @@ router.get('/api/threads/:id', async (req, res) => {
                     u.post_count AS author_post_count,
                     u.created_at AS author_join_date,
                     
-                    -- YENİ: En iyi cevabın da beğeni sayısını al
                     (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
                     (SELECT ARRAY_AGG(rr.user_id) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS liked_by_users
                     
@@ -284,11 +330,8 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     }
 });
 
-// ... (dosyanın geri kalanı aynı) ...
-// router.post('/api/threads/:id/reply', ...) rotasından sonra,
-// module.exports = router; satırından önce
-
-// --- YENİ: KULLANICI PROFİL ROTASI ---
+// --- KULLANICI PROFİL ROTASI ---
+// (Aynı kaldı)
 router.get('/api/profile/:username', async (req, res) => {
     try {
         const { username } = req.params;
@@ -300,7 +343,6 @@ router.get('/api/profile/:username', async (req, res) => {
         );
 
         // 2. Kullanıcının son 15 cevabını çek
-        // (Önce kullanıcıyı bulup ID'sini almamız lazım)
         const userResult = await userQuery;
         if (userResult.rows.length === 0) {
             return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
