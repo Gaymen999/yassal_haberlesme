@@ -284,4 +284,58 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     }
 });
 
+// ... (dosyanın geri kalanı aynı) ...
+// router.post('/api/threads/:id/reply', ...) rotasından sonra,
+// module.exports = router; satırından önce
+
+// --- YENİ: KULLANICI PROFİL ROTASI ---
+router.get('/api/profile/:username', async (req, res) => {
+    try {
+        const { username } = req.params;
+
+        // 1. Kullanıcı bilgilerini çek (username'e göre)
+        const userQuery = pool.query(
+            'SELECT id, username, avatar_url, title, post_count, created_at FROM users WHERE username = $1',
+            [username]
+        );
+
+        // 2. Kullanıcının son 15 cevabını çek
+        // (Önce kullanıcıyı bulup ID'sini almamız lazım)
+        const userResult = await userQuery;
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+        }
+        
+        const user = userResult.rows[0];
+        const userId = user.id;
+
+        // Şimdi bu ID ile son cevapları çekelim
+        const recentRepliesQuery = pool.query(`
+            SELECT 
+                r.id AS reply_id, 
+                r.content, 
+                r.created_at,
+                p.id AS thread_id,
+                p.title AS thread_title
+            FROM replies r
+            JOIN posts p ON r.thread_id = p.id
+            WHERE r.author_id = $1
+            ORDER BY r.created_at DESC
+            LIMIT 15;
+        `, [userId]);
+        
+        const repliesResult = await recentRepliesQuery;
+
+        res.json({
+            user: user,
+            recentActivity: repliesResult.rows
+        });
+
+    } catch (err) {
+        console.error("Profil bilgisi getirilirken hata:", err.message);
+        res.status(500).send('Sunucu Hatası');
+    }
+});
+
+
 module.exports = router;
