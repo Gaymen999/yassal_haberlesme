@@ -256,3 +256,47 @@
     display: block;
     margin: 10px 0;
 }
+
+/* === EN İYİ CEVAP ÖZELLİĞİ === */
+
+/* En İyi Cevap kutusu (Yeşil) */
+.best-answer-box {
+    background-color: #dff0d8; /* Açık yeşil */
+    border: 1px solid #d6e9c6;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+/* En İyi Cevap kutusunun başlığı */
+.best-answer-title {
+    color: #3c763d; /* Koyu yeşil */
+    margin-top: 0;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed #c9e2b3;
+}
+
+/* En İyi Cevap kutusundaki profil */
+.best-answer-box .user-profile-sidebar {
+    background-color: #ebf5e7;
+    border-right: 1px solid #d6e9c6;
+}
+
+/* Admin kontrol butonları (sağ üst) */
+.admin-actions-reply button.mark-best-btn,
+.admin-actions-reply button.unmark-best-btn {
+    background-color: #5cb85c; /* Yeşil */
+    font-size: 0.75em; /* Daha küçük */
+}
+
+.admin-actions-reply button.unmark-best-btn {
+    background-color: #777; /* Gri */
+}
+
+.admin-actions-reply button.mark-best-btn:hover {
+    background-color: #4cae4c;
+}
+
+.admin-actions-reply button.unmark-best-btn:hover {
+    background-color: #555;
+}
