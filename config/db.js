@@ -8,7 +8,6 @@ const pool = new Pool({
 });
 
 const createTables = async () => {
-  // (users, categories, posts, replies tabloları önceki adımla aynı)
   const usersTableQuery = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -32,13 +31,18 @@ const createTables = async () => {
     );
   `;
 
+  // DEĞİŞTİ: "posts" tablosu güncellendi
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
       content TEXT NOT NULL,
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+      
+      -- DEĞİŞTİ: Kategori artık zorunlu değil (NULL olabilir)
+      -- Bir kategori silinirse, ilgili postlar silinmez, kategorisiz kalır (SET NULL)
+      category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+      
       is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
       is_locked BOOLEAN DEFAULT FALSE NOT NULL,
       best_reply_id INTEGER NULL, 
@@ -56,26 +60,22 @@ const createTables = async () => {
     );
   `;
 
-  // YENİ: Ana Konu (Post/Thread) Beğenileri Tablosu
   const threadReactionsTableQuery = `
     CREATE TABLE IF NOT EXISTS thread_reactions (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       thread_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       reaction_type VARCHAR(50) DEFAULT 'like' NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      -- PRIMARY KEY: Bir kullanıcı bir konuyu sadece bir kez beğenebilir
       PRIMARY KEY (user_id, thread_id)
     );
   `;
 
-  // YENİ: Cevap (Reply) Beğenileri Tablosu
   const replyReactionsTableQuery = `
     CREATE TABLE IF NOT EXISTS reply_reactions (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       reply_id INTEGER NOT NULL REFERENCES replies(id) ON DELETE CASCADE,
       reaction_type VARCHAR(50) DEFAULT 'like' NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      -- PRIMARY KEY: Bir kullanıcı bir cevabı sadece bir kez beğenebilir
       PRIMARY KEY (user_id, reply_id)
     );
   `;
@@ -87,8 +87,6 @@ const createTables = async () => {
     await pool.query(categoriesTableQuery); 
     await pool.query(postsTableQuery); 
     await pool.query(repliesTableQuery); 
-    
-    // YENİ: Reaksiyon tablolarını oluştur
     await pool.query(threadReactionsTableQuery);
     await pool.query(replyReactionsTableQuery);
     

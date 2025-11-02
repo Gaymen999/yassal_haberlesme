@@ -1,117 +1,89 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const postSubmitForm = document.getElementById('post-submit-form');
+    const submitForm = document.getElementById('submit-form');
+    const titleInput = document.getElementById('title');
     const messageElement = document.getElementById('message');
-    const categorySelect = document.getElementById('category');
+    
+    // DEĞİŞTİ: Kategori seçici kaldırıldı
+    // const categorySelect = document.getElementById('category-select');
 
-    // YENİ: Quill.js Editörünü Başlatma
-    // Technopat'taki gibi kod bloğu, resim, video vb. butonları ekliyoruz.
+    // Quill editörünü ayarla
     const toolbarOptions = [
-        ['bold', 'italic', 'underline', 'strike'],        // Kalın, italik vb.
-        ['blockquote', 'code-block'],                     // Alıntı ve kod bloğu
-        [{ 'header': [1, 2, 3, false] }],               // Başlık seviyeleri
-        [{ 'list': 'ordered'}, { 'list': 'bullet' }],     // Listeleme
-        [{ 'indent': '-1'}, { 'indent': '+1' }],          // Girinti
-        ['link', 'image', 'video'],                       // Link, Resim, Video
-        ['clean']                                         // Formatlamayı temizle
+        ['bold', 'italic', 'underline', 'strike'],
+        ['blockquote', 'code-block'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        ['link', 'image', 'video'], // video eklendi
+        ['clean']
     ];
 
     const quill = new Quill('#editor-container', {
         modules: {
             toolbar: toolbarOptions
         },
-        theme: 'snow', // 'Snow' teması (standart)
-        placeholder: 'Konu içeriğini buraya yazın...'
+        theme: 'snow',
+        placeholder: 'İçeriğinizi buraya yazın...'
     });
 
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        messageElement.textContent = '';
+        messageElement.style.color = 'red';
 
-    // (fetchCategories fonksiyonu aynı kaldı)
-    const fetchCategories = async () => {
+        const title = titleInput.value;
+        const content = quill.root.innerHTML; // HTML içeriğini al
+        
+        // DEĞİŞTİ: Kategori ID kaldırıldı
+        // const category_id = categorySelect.value;
+
+        if (!title.trim() || !content.trim() || content === '<p><br></p>') {
+            messageElement.textContent = 'Başlık ve içerik alanları boş bırakılamaz.';
+            return;
+        }
+
+        // DEĞİŞTİ: Kategori ID kontrolü kaldırıldı
+        // if (!category_id) {
+        //     messageElement.textContent = 'Lütfen bir kategori seçin.';
+        //     return;
+        // }
+        
+        // İçeriği XSS'e karşı temizle (DOMPurify)
+        const cleanContent = DOMPurify.sanitize(content);
+
         try {
-            const response = await fetch('/api/categories', {
-                credentials: 'include' 
+            const response = await fetch('/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    title: title, 
+                    content: cleanContent
+                    // DEĞİŞTİ: category_id gönderilmiyor
+                    // category_id: category_id
+                }),
+                credentials: 'include'
             });
-            if (!response.ok) throw new Error('Kategoriler yüklenemedi.');
 
-            const categories = await response.json();
-            
-            if (categories.length === 0) {
-                categorySelect.innerHTML = '<option value="" disabled selected>Hiç kategori bulunamadı.</option>';
-                return;
+            const data = await response.json();
+
+            if (response.ok) {
+                messageElement.textContent = 'Konunuz başarıyla yayınlandı! Yönlendiriliyorsunuz...';
+                messageElement.style.color = 'green';
+                setTimeout(() => {
+                    // Kullanıcıyı yeni açtığı konuya yönlendir
+                    window.location.href = `/thread.html?id=${data.post.id}`;
+                }, 2000);
+            } else {
+                throw new Error(data.message || 'Bir hata oluştu.');
             }
-
-            categorySelect.innerHTML = '<option value="" disabled selected>Bir kategori seçin...</option>';
-            categories.forEach(category => {
-                const option = document.createElement('option');
-                option.value = category.id; 
-                option.textContent = category.name; 
-                categorySelect.appendChild(option);
-            });
-
         } catch (error) {
-            console.error(error);
-            categorySelect.innerHTML = '<option value="" disabled selected>Kategoriler yüklenirken hata oluştu.</option>';
+            console.error('Konu gönderme hatası:', error);
+            messageElement.textContent = error.message;
         }
     };
-    fetchCategories();
 
-
-    // Form gönderme işlemini güncelle
-    if (postSubmitForm) {
-        postSubmitForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            messageElement.textContent = 'Gönderiliyor...';
-            messageElement.style.color = 'black';
-            
-            const title = postSubmitForm.elements.title.value;
-            // DEĞİŞTİ: İçeriği <textarea> yerine Quill editöründen alıyoruz
-            // .root.innerHTML bize HTML içeriğini verir.
-            const content = quill.root.innerHTML; 
-            
-            const category_id = postSubmitForm.elements.category.value; 
-
-            // YENİ: İçerik boş mu diye kontrol et (Quill boşken <p><br></p> verir)
-            if (!title || !category_id || content === '<p><br></p>' || content.length < 10) {
-                 messageElement.style.color = 'red';
-                 messageElement.textContent = 'Başlık, kategori ve içerik (en az 10 karakter) zorunludur.';
-                 return;
-            }
-
-            try {
-                const response = await fetch('/posts', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    // 'content' artık düz metin değil, HTML gönderiyor
-                    body: JSON.stringify({ title, content, category_id }), 
-                    credentials: 'include' 
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    messageElement.style.color = 'green';
-                    messageElement.textContent = data.message || 'Konunuz başarıyla yayınlandı!';
-                    postSubmitForm.reset(); 
-                    quill.root.innerHTML = ''; // Editörü temizle
-                    
-                    // YENİ: Başarılı olunca konunun detay sayfasına yönlendir
-                    // (Bu kodu bir önceki adımda eklemiştik, yine ekliyorum)
-                    window.location.href = `/thread.html?id=${data.post.id}`;
-                } else {
-                    messageElement.style.color = 'red';
-                    if (response.status === 401 || response.status === 403) {
-                         messageElement.textContent = 'Oturum süreniz doldu, lütfen tekrar giriş yapın.';
-                         setTimeout(() => window.location.href = '/login.html', 2000);
-                    } else {
-                         messageElement.textContent = data.message || 'Gönderim sırasında bir hata oluştu.';
-                    }
-                }
-            } catch (error) {
-                console.error('Gönderim hatası:', error);
-                messageElement.style.color = 'red';
-                messageElement.textContent = 'Sunucuya bağlanılamadı.';
-            }
-        });
-    }
+    // DEĞİŞTİ: Kategori çekme fonksiyonu kaldırıldı
+    // const fetchCategories = async () => { ... };
+    
+    submitForm.addEventListener('submit', handleSubmit);
+    
+    // DEĞİŞTİ: Kategori çekme fonksiyonu çağrısı kaldırıldı
+    // fetchCategories();
 });
