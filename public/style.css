@@ -413,3 +413,72 @@
     font-size: 0.9em;
     color: #555;
 }
+
+/* === ANA SAYFA KATEGORİ KARTLARI (YENİ) === */
+
+.categories-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-width: 900px; /* main ile aynı hizada */
+    margin: 0 auto 20px auto;
+}
+
+.category-card {
+    background: #fff;
+    border: 1px solid #e0e0e0; /* Sade çerçeve */
+    border-radius: 5px;
+    overflow: hidden; /* Header'ın yuvarlak köşelerini düzgün göstermek için */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.category-header {
+    background-color: #005A9C; /* Ana mavi renk */
+    padding: 10px 15px;
+}
+
+.category-header h3 {
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.category-header h3 a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.category-body {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    gap: 20px;
+}
+
+.category-info {
+    flex-grow: 1; /* Bilgi alanı genişlesin */
+}
+
+.category-info p {
+    margin: 0;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.category-stats {
+    display: flex;
+    flex-direction: column; /* İstatistikleri alt alta */
+    text-align: right;
+    font-size: 0.9em;
+    color: #333;
+    flex-shrink: 0; /* Küçülmesin */
+    min-width: 100px; /* Minimum genişlik */
+}
+
+.category-stats span {
+    display: block;
+}
+
+/* Sayfalama stilleri artık ana sayfada kullanılmıyor,
+   ama thread.html için silme. */
