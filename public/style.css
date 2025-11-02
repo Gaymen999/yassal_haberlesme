@@ -345,3 +345,15 @@
     color: #555;
     font-weight: bold;
 }
+
+/* === PROFİL LİNKİ STİLİ === */
+
+.user-profile-sidebar .profile-link {
+    text-decoration: none; /* Alt çizgiyi kaldır */
+    color: inherit; /* Rengi üst elementten (username'in rengi) al */
+}
+
+.user-profile-sidebar .profile-link:hover .username {
+    text-decoration: underline; /* Üzerine gelince altını çiz */
+    color: #003366; /* Rengi biraz koyulaştır */
+}

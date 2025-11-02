@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingMessage = document.getElementById('loading-message');
     
     let currentUserIsAdmin = false;
-    let currentUserId = null; // YENİ: Giriş yapan kullanıcının ID'si
+    let currentUserId = null; 
     let currentThread = null; 
     const params = new URLSearchParams(window.location.search);
     const threadId = params.get('id');
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
             threadContainer.innerHTML = ''; 
             loadingMessage.style.display = 'none';
 
-            await checkAuthAndRenderReplyForm(); // (Kullanıcı ID'sini ve admin durumunu alır)
+            await checkAuthAndRenderReplyForm(); 
             
             renderPagination(pagination, "top"); 
             renderOriginalPost(thread);
@@ -48,7 +48,6 @@ document.addEventListener('DOMContentLoaded', () => {
             renderReplies(replies, bestReply ? bestReply.id : null); 
             renderPagination(pagination, "bottom"); 
 
-            // YENİ: Oluşturulan tüm reaksiyon butonlarına olay dinleyici ekle
             attachReactionListeners(threadContainer);
 
         } catch (error) {
@@ -60,17 +59,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Yardımcı Fonksiyonlar ---
 
-    // (renderUserProfile fonksiyonu aynı kaldı)
+    // DEĞİŞTİ: renderUserProfile (Kullanıcı adı artık bir link)
     function renderUserProfile(author) { 
         const joinDate = new Date(author.author_join_date).toLocaleDateString('tr-TR');
         const safeUsername = DOMPurify.sanitize(author.author_username);
         const safeAvatar = DOMPurify.sanitize(author.author_avatar);
         const safeTitle = DOMPurify.sanitize(author.author_title);
         const safePostCount = DOMPurify.sanitize(author.author_post_count);
+
         return `
             <div class="user-profile-sidebar">
                 <img src="${safeAvatar}" alt="${safeUsername} Avatar" class="avatar">
-                <strong class="username">${safeUsername}</strong>
+                
+                <a href="/profile.html?username=${encodeURIComponent(safeUsername)}" class="profile-link">
+                    <strong class="username">${safeUsername}</strong>
+                </a>
+                
                 <span class="user-title">${safeTitle}</span>
                 <hr>
                 <span class="user-stat">Katılım: ${joinDate}</span>
@@ -79,34 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    // YENİ: Reaksiyon Çubuğu HTML'i oluşturan fonksiyon
-    function renderReactionArea(post, postType) {
-        // API'den gelen verileri al
-        const likeCount = post.like_count ? parseInt(post.like_count, 10) : 0;
-        const likedByArray = post.liked_by_users || []; // (SQL null dönerse boş dizi yap)
-        
-        // Giriş yapan kullanıcı bu postu beğenmiş mi?
-        const userHasLiked = currentUserId ? likedByArray.includes(currentUserId) : false;
-        
-        const likeButtonText = userHasLiked ? 'Beğenildi' : 'Beğen';
-        const likeButtonClass = userHasLiked ? 'like-btn liked' : 'like-btn';
-        // Giriş yapmadıysa butonu devre dışı bırak
-        const disabledAttr = currentUserId ? '' : 'disabled'; 
-
-        return `
-            <div class="reaction-bar">
-                <button class="${likeButtonClass}" 
-                        data-post-id="${post.id}" 
-                        data-post-type="${postType}" 
-                        ${disabledAttr}>
-                    👍 ${likeButtonText}
-                </button>
-                <span class="like-count">${likeCount}</span>
-            </div>
-        `;
-    }
-
-    // DEĞİŞTİ: renderOriginalPost (Reaksiyon çubuğu eklendi)
+    // (renderOriginalPost fonksiyonu aynı kaldı)
     function renderOriginalPost(thread) {
         const postElement = document.createElement('div');
         postElement.className = 'original-post post-layout'; 
@@ -123,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         ` : '';
         const lockIcon = thread.is_locked ? '🔒 ' : '';
-
         postElement.innerHTML = `
             ${renderUserProfile(thread)} 
             <div class="post-main-content"> 
@@ -139,7 +115,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
         threadContainer.appendChild(postElement);
-        // (Admin olay dinleyicileri aynı kaldı)
         if (currentUserIsAdmin) {
             postElement.querySelector('.delete-thread-btn')?.addEventListener('click', (e) => {
                 const threadId = e.target.dataset.id;
@@ -153,15 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // DEĞİŞTİ: renderBestAnswerBox (Reaksiyon çubuğu eklendi)
+    // (renderBestAnswerBox fonksiyonu aynı kaldı)
     function renderBestAnswerBox(bestReply) {
         const bestAnswerContainer = document.createElement('div');
         bestAnswerContainer.className = 'best-answer-box post-layout';
         bestAnswerContainer.id = `best-reply-${bestReply.id}`;
-
         const date = new Date(bestReply.created_at).toLocaleString('tr-TR');
         const safeContent = DOMPurify.sanitize(bestReply.content);
-        
         bestAnswerContainer.innerHTML = `
             ${renderUserProfile(bestReply)} 
             <div class="post-main-content"> 
@@ -175,15 +148,12 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         threadContainer.appendChild(bestAnswerContainer);
     }
-
     
-    // DEĞİŞTİ: renderReplies (Reaksiyon çubuğu eklendi)
+    // (renderReplies fonksiyonu aynı kaldı)
     function renderReplies(replies, bestReplyId) { 
         const repliesContainer = document.createElement('div');
         repliesContainer.className = 'replies-container';
-        
         const filteredReplies = replies.filter(reply => reply.id !== bestReplyId);
-
         if (filteredReplies.length === 0) {
             if (currentPage === 1 && !bestReplyId) { 
                 repliesContainer.innerHTML = '<h3>Bu konuya henüz cevap yazılmamış.</h3>';
@@ -196,17 +166,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const replyElement = document.createElement('div');
                 replyElement.className = 'reply-card post-layout'; 
                 replyElement.id = `reply-${reply.id}`; 
-                
                 const date = new Date(reply.created_at).toLocaleString('tr-TR');
                 const safeContent = DOMPurify.sanitize(reply.content);
-                
                 let adminControls = '';
                 if (currentUserIsAdmin) {
                     const isCurrentBest = (reply.id === currentThread.best_reply_id);
                     const bestAnswerButton = isCurrentBest 
                         ? `<button class="unmark-best-btn" data-thread-id="${currentThread.id}" data-reply-id="null">İşareti Kaldır</button>`
                         : `<button class="mark-best-btn" data-thread-id="${currentThread.id}" data-reply-id="${reply.id}">En İyi Cevap Yap</button>`;
-
                     adminControls = `
                         <div class="admin-actions-reply">
                             ${bestAnswerButton}
@@ -214,7 +181,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     `;
                 }
-
                 replyElement.innerHTML = `
                     ${renderUserProfile(reply)} 
                     <div class="post-main-content"> 
@@ -230,8 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         threadContainer.appendChild(repliesContainer);
-        
-        // (Admin buton dinleyicileri aynı kaldı)
         if (currentUserIsAdmin) {
             repliesContainer.querySelectorAll('.delete-reply-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -248,8 +212,31 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
+
+    // (renderReactionArea fonksiyonu aynı kaldı)
+    function renderReactionArea(post, postType) {
+        const likeCount = post.like_count ? parseInt(post.like_count, 10) : 0;
+        const likedByArray = post.liked_by_users || [];
+        const userHasLiked = currentUserId ? likedByArray.includes(currentUserId) : false;
+        const likeButtonText = userHasLiked ? 'Beğenildi' : 'Beğen';
+        const likeButtonClass = userHasLiked ? 'like-btn liked' : 'like-btn';
+        const disabledAttr = currentUserId ? '' : 'disabled'; 
+        return `
+            <div class="reaction-bar">
+                <button class="${likeButtonClass}" 
+                        data-post-id="${post.id}" 
+                        data-post-type="${postType}" 
+                        ${disabledAttr}>
+                    👍 ${likeButtonText}
+                </button>
+                <span class="like-count">${likeCount}</span>
+            </div>
+        `;
+    }
     
-    // (renderPagination aynı kaldı)
+    // (renderPagination, checkAuthAndRenderReplyForm, renderReplyForm, handleReplySubmit,
+    // handleDeleteReply, handleDeleteThread, handleToggleLockThread, handleMarkAsBest,
+    // attachReactionListeners, handleReaction fonksiyonları aynı kaldı)
     function renderPagination(pagination, position) { /* ... (içerik aynı) ... */ 
         const { currentPage, totalPages } = pagination;
         if (totalPages <= 1) return; 
@@ -274,16 +261,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if(position === 'top') threadContainer.insertAdjacentElement('beforebegin', paginationNav);
         else threadContainer.insertAdjacentElement('afterend', paginationNav);
     }
-
-    // DEĞİŞTİ: checkAuthAndRenderReplyForm (currentUserId eklendi)
-    async function checkAuthAndRenderReplyForm() { 
+    async function checkAuthAndRenderReplyForm() { /* ... (içerik aynı) ... */ 
         if (currentThread && currentThread.is_locked) {
             replyFormContainer.innerHTML = `<div class="locked-message">🔒 Bu konu kilitlenmiştir. Yeni cevap yazılamaz.</div>`;
             try {
                 const res = await fetch('/api/user-status', { credentials: 'include' });
                 const data = await res.json();
                 if (data.loggedIn) {
-                    currentUserId = data.user.id; // YENİ
+                    currentUserId = data.user.id; 
                     if (data.user.role === 'admin') currentUserIsAdmin = true;
                 }
             } catch (error) { /* ignore */ }
@@ -293,18 +278,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/user-status', { credentials: 'include' });
             const data = await res.json();
             if (data.loggedIn) {
-                currentUserId = data.user.id; // YENİ
+                currentUserId = data.user.id; 
                 if (data.user.role === 'admin') currentUserIsAdmin = true;
                 renderReplyForm();
             } else {
-                currentUserId = null; // YENİ
+                currentUserId = null; 
                 currentUserIsAdmin = false;
                 replyFormContainer.innerHTML = `<p style="text-align:center; font-weight:bold;">Beğenmek ve cevap yazabilmek için <a href="/login.html?redirect=/thread.html?id=${threadId}&page=${currentPage}">giriş yapmanız</a> gerekmektedir.</p>`;
             }
         } catch (error) { console.error('Kullanıcı durumu kontrol hatası:', error); currentUserIsAdmin = false; }
     }
-
-    // (renderReplyForm ve handleReplySubmit aynı kaldı)
     function renderReplyForm() { /* ... (içerik aynı) ... */ 
         replyFormContainer.innerHTML = `
             <form id="reply-form" class="reply-form">
@@ -355,8 +338,6 @@ document.addEventListener('DOMContentLoaded', () => {
             messageElement.style.color = 'red';
         }
     }
-    
-    // (Tüm admin fonksiyonları aynı kaldı)
     async function handleDeleteReply(replyId) { /* ... (içerik aynı) ... */ 
         if (!confirm("Bu cevabı kalıcı olarak silmek istediğinizden emin misiniz?")) return;
         try {
@@ -424,54 +405,37 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) { console.error('En İyi Cevap işaretleme hatası:', error); alert('Sunucuya bağlanılamadı.'); }
     }
-
-
-    // YENİ: Reaksiyon Butonları İçin Olay Dinleyici Ekleme
     function attachReactionListeners(container) {
         container.querySelectorAll('.like-btn').forEach(btn => {
             btn.addEventListener('click', handleReaction);
         });
     }
-
-    // YENİ: Reaksiyon API'sini Çağıran Ana Fonksiyon
-    async function handleReaction(e) {
+    async function handleReaction(e) { /* ... (içerik aynı) ... */ 
         const button = e.target;
-        if (button.disabled) return; // Zaten giriş yapılmamışsa disabled'dır
-
+        if (button.disabled) return; 
         const postId = button.dataset.postId;
         const postType = button.dataset.postType;
-
         if (!postId || !postType) return;
-
         const apiUrl = postType === 'thread' 
             ? `/api/threads/${postId}/react` 
             : `/api/replies/${postId}/react`;
-
-        button.disabled = true; // Çift tıklamayı engelle
-
+        button.disabled = true; 
         try {
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {'Content-Type': 'application/json'}
-                // Body'ye şimdilik gerek yok, 'like' varsayılan
             });
-
             if (!response.ok) {
-                // Giriş yapılmamışsa (cookie yoksa) API 401 döndürür
                 if (response.status === 401) {
                     alert('Beğenmek için giriş yapmalısınız.');
                     window.location.href = `/login.html?redirect=/thread.html?id=${threadId}&page=${currentPage}`;
                 }
                 throw new Error('Reaksiyon başarısız.');
             }
-
             const data = await response.json();
-            
-            // Butonu ve sayacı anlık güncelle
             const likeCountElement = button.nextElementSibling;
             let currentCount = parseInt(likeCountElement.textContent, 10);
-
             if (data.liked) {
                 button.textContent = '👍 Beğenildi';
                 button.classList.add('liked');
@@ -481,7 +445,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 button.classList.remove('liked');
                 likeCountElement.textContent = currentCount - 1;
             }
-
             button.disabled = false;
         } catch (error) {
             console.error('Reaksiyon hatası:', error);
