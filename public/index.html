@@ -3,39 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Okul Duyurular Merkezi</title>
+    <title>Yassal Haberleşme Forumu</title>
     <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
-    <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid #ccc;">
-        <h1>Okul Sitesi - En Son Duyurular</h1>
-
-        <div style="display: flex; gap: 15px; font-weight: bold; align-items: center;">
-            
-            <div id="auth-links">
+    <header>
+        <h1>Yassal Haberleşme Forumu</h1>
+        <nav>
+            <div id="auth-links" style="display: flex; gap: 15px;">
                 </div>
-            
-            <div id="post-link">
-                </div>
-        </div>
+        </nav>
     </header>
 
     <main>
-        <h2>Onaylanmış Tüm Duyurular</h2>
-        <div id="posts-container">
-            <p>Duyurular yükleniyor...</p> 
+        <div id="new-post-button-container" class="new-post-container">
+        </div>
+
+        <h2>Son Konular</h2>
+        <div id="posts-container" class="posts-container">
+            <p>Konular yükleniyor...</p>
         </div>
     </main>
 
     <footer>
-        <p>&copy; 2025 Okul Sitesi. Tüm Hakları Saklıdır.</p>
-        <a href="archive.html">Duyuru Arşivi</a> | 
-        <a href="contact.html">İletişim</a> | 
-        <a href="admin.html">Admin Paneli</a>
+        <p>&copy; 2025 Yassal Haberleşme</p>
     </footer>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <script src="script.js"></script>
-    <script src="global.js"></script> 
-</body>
+    
+    <script src="global.js"></script> <script src="script.js"></script> </body>
 </html>
