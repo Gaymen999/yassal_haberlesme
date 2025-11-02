@@ -3,34 +3,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const postsContainer = document.getElementById('posts-container');
     const newPostButtonContainer = document.getElementById('new-post-button-container');
     
-    // YENİ: Sayfalama konteynerleri
+    // Sayfalama konteynerleri
     const paginationContainerTop = document.getElementById('pagination-container-top');
     const paginationContainerBottom = document.getElementById('pagination-container-bottom');
 
-    // YENİ: URL'den mevcut sayfayı al
+    // URL'den mevcut sayfayı al
     const params = new URLSearchParams(window.location.search);
     const currentPage = parseInt(params.get('page'), 10) || 1;
     
     let isAdmin = false;
     let isLoggedIn = false; 
 
-    try {
-        const response = await fetch('/api/user-status', {
-            credentials: 'include' 
-        });
-        const data = await response.json();
-        
-        if (data.loggedIn) {
-            isLoggedIn = true; 
-            if (data.user.role === 'admin') {
-                isAdmin = true;
-            }
-        }
-        renderNewPostButton();
-    } catch (error) {
-        console.warn('Kullanıcı durumu kontrol edilemedi.');
-        renderNewPostButton();
-    }
+    // --- 1. FONKSİYON TANIMLAMALARI (Önce fonksiyonları tanımla) ---
     
     const renderNewPostButton = () => {
         if (isLoggedIn) {
@@ -66,15 +50,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
     
-    // YENİ: Sayfalama Linklerini Oluşturan Fonksiyon
     const renderPagination = (pagination) => {
         const { currentPage, totalPages } = pagination;
         
-        // Temizle
         paginationContainerTop.innerHTML = '';
         paginationContainerBottom.innerHTML = '';
 
-        if (totalPages <= 1) return; // Sayfalama gerekmiyorsa
+        if (totalPages <= 1) return; 
 
         let paginationHTML = '';
         
@@ -106,14 +88,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         paginationContainerBottom.innerHTML = paginationHTML;
     }
 
-    // DEĞİŞTİ: Konuları Çeken Ana Fonksiyon (Sayfalama eklendi)
     const fetchPosts = async () => {
         try {
-            // YENİ: API'ye ?page= parametresini gönder
             const response = await fetch(`/api/posts?page=${currentPage}`, { credentials: 'include' });
             if (!response.ok) throw new Error('Konular yüklenirken bir hata oluştu: ' + response.statusText);
 
-            const data = await response.json(); // API artık { posts: [], pagination: {} } döndürüyor
+            const data = await response.json(); 
             const { posts, pagination } = data;
             
             postsContainer.innerHTML = ''; 
@@ -123,7 +103,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             
-            // YENİ: Sayfalama linklerini render et
             renderPagination(pagination);
 
             posts.forEach(post => {
@@ -152,7 +131,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
                 const safeCategoryName = DOMPurify.sanitize(post.category_name);
 
-                // YENİ: Cevap ve Beğeni sayıları eklendi
                 postElement.innerHTML = `
                     <div class="post-header">
                         <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
@@ -187,7 +165,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             postsContainer.innerHTML = `<p style="color: red;">Konular yüklenirken hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
         }
     };
+    
+    // --- 2. KODU ÇALIŞTIRMA (Fonksiyonlar tanımlandıktan sonra) ---
+    
+    // DEĞİŞTİ: Bu blok dosyanın sonuna taşındı.
+    // Önce kullanıcı durumunu kontrol et
+    try {
+        const response = await fetch('/api/user-status', {
+            credentials: 'include' 
+        });
+        const data = await response.json();
+        
+        if (data.loggedIn) {
+            isLoggedIn = true; 
+            if (data.user.role === 'admin') {
+                isAdmin = true;
+            }
+        }
+        // Şimdi butonu render et (fonksiyon artık tanımlı)
+        renderNewPostButton();
 
-    // fetchPosts'u, kullanıcı durumu kontrolü bittikten sonra çağır
+    } catch (error) {
+        console.warn('Kullanıcı durumu kontrol edilemedi.');
+        // Giriş yapmamış gibi devam et (fonksiyon artık tanımlı)
+        renderNewPostButton();
+    }
+
+    // Kullanıcı durumu ve buton render edildikten sonra konuları çek
     fetchPosts();
 });
