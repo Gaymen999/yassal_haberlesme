@@ -300,3 +300,48 @@
 .admin-actions-reply button.unmark-best-btn:hover {
     background-color: #555;
 }
+
+/* === REAKSİYON (BEĞENİ) SİSTEMİ === */
+
+.reaction-bar {
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.reaction-bar .like-btn {
+    background-color: #f0f2f5;
+    border: 1px solid #ccd0d5;
+    color: #4b4f56;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+.reaction-bar .like-btn:hover {
+    background-color: #e9ebee;
+}
+
+/* Kullanıcı giriş yapmamışsa */
+.reaction-bar .like-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* Kullanıcı beğenmişse */
+.reaction-bar .like-btn.liked {
+    background-color: #e7f3ff; /* Açık mavi */
+    color: #005A9C; /* Ana renk */
+    border-color: #005A9C;
+}
+
+.reaction-bar .like-count {
+    font-size: 0.9em;
+    color: #555;
+    font-weight: bold;
+}

@@ -7,7 +7,7 @@ const REPLIES_PER_PAGE = 20;
 
 // --- KATEGORİ ROTALARI ---
 // (Bu rotalar değişmedi, aynı kalıyor)
-router.get('/api/categories', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/categories', async (req, res) => { 
     try {
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
         res.json(categories.rows);
@@ -16,7 +16,7 @@ router.get('/api/categories', async (req, res) => { /* ... (içerik aynı) ... *
         res.status(500).send('Sunucu Hatası');
     }
 });
-router.get('/api/categories/:slug', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/categories/:slug', async (req, res) => { 
     try {
         const { slug } = req.params;
         const postsInCategory = await pool.query(`
@@ -32,7 +32,6 @@ router.get('/api/categories/:slug', async (req, res) => { /* ... (içerik aynı)
             WHERE c.slug = $1
             ORDER BY p.is_pinned DESC, p.created_at DESC;
         `, [slug]);
-
         if (postsInCategory.rows.length === 0) {
             return res.status(404).json({ message: 'Kategori bulunamadı veya bu kategoride konu yok.' });
         }
@@ -47,22 +46,18 @@ router.get('/api/categories/:slug', async (req, res) => { /* ... (içerik aynı)
 // --- KONU (THREAD/POST) ROTALARI ---
 
 // Yeni Konu Açma (/posts) (Aynı kaldı)
-router.post('/posts', authenticateToken, async (req, res) => { /* ... (içerik aynı) ... */ 
+router.post('/posts', authenticateToken, async (req, res) => { 
     try {
         const { title, content, category_id } = req.body; 
         const authorId = req.user.id; 
-
         if (!title || !content || !category_id) {
             return res.status(400).json({ message: 'Başlık, içerik ve kategori ID zorunludur.' });
         }
-        
         const newPost = await pool.query(
             'INSERT INTO posts (title, content, category_id, author_id) VALUES ($1, $2, $3, $4) RETURNING *',
             [title, content, category_id, authorId]
         );
-        
         await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [authorId]);
-
         res.status(201).json({ 
             message: 'Konunuz başarıyla yayınlandı!', 
             post: newPost.rows[0] 
@@ -77,8 +72,9 @@ router.post('/posts', authenticateToken, async (req, res) => { /* ... (içerik a
 });
 
 // Ana Sayfa Konu Listeleme (/api/posts) (Aynı kaldı)
-router.get('/api/posts', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/posts', async (req, res) => { 
     try {
+        // TODO: Buraya da reaksiyon sayısı eklenecek (bir sonraki adımda)
         const approvedPosts = await pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.is_pinned, p.created_at, 
@@ -99,7 +95,7 @@ router.get('/api/posts', async (req, res) => { /* ... (içerik aynı) ... */
 });
 
 // Arşiv Listeleme (/api/archive-posts) (Aynı kaldı)
-router.get('/api/archive-posts', async (req, res) => { /* ... (içerik aynı) ... */ 
+router.get('/api/archive-posts', async (req, res) => { 
     try {
         const archivedPosts = await pool.query(`
             SELECT 
@@ -126,7 +122,7 @@ router.get('/api/threads/:id', async (req, res) => {
         const page = parseInt(req.query.page, 10) || 1;
         const offset = (page - 1) * REPLIES_PER_PAGE;
 
-        // 1. Konunun ana bilgisini çek (YENİ: 'best_reply_id' eklendi)
+        // 1. Konunun ana bilgisini çek (DEĞİŞTİ: Reaksiyon bilgisi eklendi)
         const threadQuery = pool.query(`
             SELECT 
                 p.id, p.title, p.content, p.created_at, p.is_locked, p.best_reply_id, p.author_id,
@@ -135,14 +131,20 @@ router.get('/api/threads/:id', async (req, res) => {
                 u.avatar_url AS author_avatar,
                 u.title AS author_title,
                 u.post_count AS author_post_count,
-                u.created_at AS author_join_date
+                u.created_at AS author_join_date,
+                
+                -- YENİ: Toplam beğeni sayısı
+                (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count,
+                -- YENİ: Beğenen kullanıcı ID'lerinin listesi (frontend kontrolü için)
+                (SELECT ARRAY_AGG(tr.user_id) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS liked_by_users
+
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
             WHERE p.id = $1;
         `, [id]);
 
-        // 2. Sayfalanmış cevapları çek (Aynı kaldı)
+        // 2. Sayfalanmış cevapları çek (DEĞİŞTİ: Reaksiyon bilgisi eklendi)
         const repliesQuery = pool.query(`
             SELECT 
                 r.id, r.content, r.created_at,
@@ -150,7 +152,13 @@ router.get('/api/threads/:id', async (req, res) => {
                 u.avatar_url AS author_avatar,
                 u.title AS author_title,
                 u.post_count AS author_post_count,
-                u.created_at AS author_join_date
+                u.created_at AS author_join_date,
+
+                -- YENİ: Toplam beğeni sayısı
+                (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
+                -- YENİ: Beğenen kullanıcı ID'lerinin listesi
+                (SELECT ARRAY_AGG(rr.user_id) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS liked_by_users
+
             FROM replies r
             JOIN users u ON r.author_id = u.id
             WHERE r.thread_id = $1
@@ -180,7 +188,7 @@ router.get('/api/threads/:id', async (req, res) => {
         const totalReplies = parseInt(repliesCountResult.rows[0].count, 10);
         const totalPages = Math.ceil(totalReplies / REPLIES_PER_PAGE);
         
-        // YENİ: 4. Eğer 'best_reply_id' varsa, o cevabı da çek
+        // 4. En iyi cevabı çek (Aynı kaldı)
         let bestReply = null;
         if (thread.best_reply_id) {
             const bestReplyQuery = await pool.query(`
@@ -190,7 +198,12 @@ router.get('/api/threads/:id', async (req, res) => {
                     u.avatar_url AS author_avatar,
                     u.title AS author_title,
                     u.post_count AS author_post_count,
-                    u.created_at AS author_join_date
+                    u.created_at AS author_join_date,
+                    
+                    -- YENİ: En iyi cevabın da beğeni sayısını al
+                    (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
+                    (SELECT ARRAY_AGG(rr.user_id) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS liked_by_users
+                    
                 FROM replies r
                 JOIN users u ON r.author_id = u.id
                 WHERE r.id = $1;
@@ -204,7 +217,7 @@ router.get('/api/threads/:id', async (req, res) => {
         res.json({ 
             thread, 
             replies,
-            bestReply: bestReply, // YENİ: En iyi cevap eklendi
+            bestReply: bestReply,
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
