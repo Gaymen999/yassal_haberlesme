@@ -7,10 +7,8 @@ const POSTS_PER_PAGE = 20;
 const REPLIES_PER_PAGE = 20;
 
 // --- KATEGORİ ROTALARI ---
-// (Bu rotalar aynı kaldı)
 router.get('/api/categories', async (req, res) => { 
     try {
-        // DEĞİŞTİ: Açıklama ve slug da gelsin (belki lazım olur)
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
         res.json(categories.rows);
     } catch (err) {
@@ -19,7 +17,6 @@ router.get('/api/categories', async (req, res) => {
     }
 });
 router.get('/api/categories/:slug', async (req, res) => { 
-    // ... (Bu rota aynı kaldı) ...
     try {
         const { slug } = req.params;
         const postsInCategory = await pool.query(`
@@ -48,13 +45,12 @@ router.get('/api/categories/:slug', async (req, res) => {
 
 // --- KONU (THREAD/POST) ROTALARI ---
 
-// DEĞİŞTİ: Yeni Konu Açma (/posts) (Kategori zorunlu)
+// Yeni Konu Açma (Kategori zorunlu)
 router.post('/posts', authenticateToken, async (req, res) => { 
     try {
         const { title, content, category_id } = req.body; 
         const authorId = req.user.id; 
         
-        // DEĞİŞTİ: category_id kontrolü geri geldi
         if (!title || !content || !category_id) {
             return res.status(400).json({ message: 'Başlık, içerik ve kategori zorunludur.' });
         }
@@ -79,9 +75,8 @@ router.post('/posts', authenticateToken, async (req, res) => {
     }
 });
 
-// Ana Sayfa Konu Listeleme (/api/posts) (Aynı kaldı, LIMIT 5)
+// Ana Sayfa Konu Listeleme (LIMIT 5)
 router.get('/api/posts', async (req, res) => { 
-    // ... (Bu rota aynı kaldı) ...
     try {
         const pinnedPostsQuery = pool.query(`
             SELECT 
@@ -127,7 +122,7 @@ router.get('/api/posts', async (req, res) => {
     }
 });
 
-// DEĞİŞTİ: Arşiv Listeleme (/api/archive-posts) - Filtreleme eklendi
+// Arşiv Listeleme (Filtrelemeli)
 router.get('/api/archive-posts', async (req, res) => { 
     try {
         const { category_id } = req.query; // Filtre parametresini al
@@ -162,9 +157,8 @@ router.get('/api/archive-posts', async (req, res) => {
     }
 });
 
-// Tek bir konuyu getir (/api/threads/:id) (Aynı kaldı)
+// Tek bir konuyu getir
 router.get('/api/threads/:id', async (req, res) => {
-    // ... (Bu rota aynı kaldı) ...
     try {
         const { id } = req.params;
         const page = parseInt(req.query.page, 10) || 1;
@@ -253,8 +247,9 @@ router.get('/api/threads/:id', async (req, res) => {
         console.error("Konu ve cevapları getirirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
-});
-// ... (Diğer rotalar: /api/threads/:id/reply, /api/profile/:username aynı kaldı) ...
+}); // <-- DÜZELTME: EKSİK OLAN PARANTEZ BURAYA EKLENDİ
+
+// --- CEVAP (REPLY) ROTALARI ---
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     try {
         const { id: threadId } = req.params; 
@@ -303,6 +298,8 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
         res.status(500).send('Sunucu Hatası');
     }
 });
+
+// --- KULLANICI PROFİL ROTASI ---
 router.get('/api/profile/:username', async (req, res) => {
     try {
         const { username } = req.params;
