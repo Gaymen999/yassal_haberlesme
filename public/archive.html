@@ -1,32 +1,36 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-R">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Duyuru Arşivi</title>
-    <link rel="stylesheet" href="style.css"> 
+    <title>Konu Arşivi</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <h1>Okul Duyuru Arşivi</h1>
-        <nav>
-            <a href="index.html">Ana Sayfa</a>
-        </nav>
+        <h1><a href="index.html" style="text-decoration:none; color:inherit;">Forum Ana Sayfa</a></h1>
+        <div id="auth-links" style="display: flex; gap: 15px;">
+            </div>
     </header>
 
     <main>
-        <h2>Tüm Eski Duyurular</h2>
-        <div id="archive-posts-container">
-            <p>Arşiv yükleniyor...</p> 
+        <h2>Konu Arşivi</h2>
+        
+        <div id="category-filters" class="category-filters">
+            <p>Filtrele:</p>
+            </div>
+
+        <div id="archive-container" class="posts-container">
+            <p>Arşiv yükleniyor...</p>
         </div>
     </main>
 
     <footer>
-        <p>&copy; 2025 Okul Sitesi. Arşiv</p>
+        <p>&copy; 2025 Yassal Haberleşme</p>
     </footer>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="global.js"></script>
     <script src="archive.js"></script>
-    <script src="global.js"></script> 
 </body>
 </html>

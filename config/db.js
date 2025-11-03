@@ -31,7 +31,6 @@ const createTables = async () => {
     );
   `;
 
-  // DEĞİŞTİ: "posts" tablosu güncellendi
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -39,9 +38,9 @@ const createTables = async () => {
       content TEXT NOT NULL,
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       
-      -- DEĞİŞTİ: Kategori artık zorunlu değil (NULL olabilir)
-      -- Bir kategori silinirse, ilgili postlar silinmez, kategorisiz kalır (SET NULL)
-      category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+      -- DEĞİŞTİ: Kategori tekrar zorunlu hale geldi (NOT NULL)
+      -- Kategori silinirse, o kategorideki postlar da silinir (CASCADE)
+      category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
       
       is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
       is_locked BOOLEAN DEFAULT FALSE NOT NULL,
@@ -50,6 +49,7 @@ const createTables = async () => {
     );
   `;
 
+  // ... (Diğer tablolar aynı: replies, thread_reactions, reply_reactions) ...
   const repliesTableQuery = `
     CREATE TABLE IF NOT EXISTS replies (
       id SERIAL PRIMARY KEY,
@@ -59,7 +59,6 @@ const createTables = async () => {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
-
   const threadReactionsTableQuery = `
     CREATE TABLE IF NOT EXISTS thread_reactions (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -69,7 +68,6 @@ const createTables = async () => {
       PRIMARY KEY (user_id, thread_id)
     );
   `;
-
   const replyReactionsTableQuery = `
     CREATE TABLE IF NOT EXISTS reply_reactions (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -80,9 +78,7 @@ const createTables = async () => {
     );
   `;
 
-
   try {
-    // Sıralama önemli
     await pool.query(usersTableQuery);
     await pool.query(categoriesTableQuery); 
     await pool.query(postsTableQuery); 
@@ -91,6 +87,20 @@ const createTables = async () => {
     await pool.query(replyReactionsTableQuery);
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
+
+    // YENİ: Varsayılan kategorileri ekle (eğer yoksa)
+    const categoriesCheck = await pool.query('SELECT * FROM categories');
+    if (categoriesCheck.rows.length === 0) {
+        console.log('Varsayılan kategoriler ekleniyor...');
+        await pool.query(`
+            INSERT INTO categories (name, description, slug) VALUES
+            ('9. Sınıf', '9. Sınıf duyuruları ve tartışmaları.', '9-sinif'),
+            ('10. Sınıf', '10. Sınıf duyuruları ve tartışmaları.', '10-sinif'),
+            ('11. Sınıf', '11. Sınıf duyuruları ve tartışmaları.', '11-sinif'),
+            ('12. Sınıf', '12. Sınıf duyuruları ve tartışmaları.', '12-sinif');
+        `);
+    }
+
   } catch (err) {
     console.error("Tablolar oluşturulurken hata:", err);
   }

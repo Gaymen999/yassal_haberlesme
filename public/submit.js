@@ -3,18 +3,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const titleInput = document.getElementById('title');
     const messageElement = document.getElementById('message');
     
-    // DEĞİŞTİ: Kategori seçici kaldırıldı
-    // const categorySelect = document.getElementById('category-select');
+    // DEĞİŞTİ: Kategori seçici geri geldi
+    const categorySelect = document.getElementById('category-select');
 
-    // Quill editörünü ayarla
+    // ... (Quill ayarları aynı) ...
     const toolbarOptions = [
         ['bold', 'italic', 'underline', 'strike'],
         ['blockquote', 'code-block'],
         [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-        ['link', 'image', 'video'], // video eklendi
+        ['link', 'image', 'video'], 
         ['clean']
     ];
-
     const quill = new Quill('#editor-container', {
         modules: {
             toolbar: toolbarOptions
@@ -23,29 +22,49 @@ document.addEventListener('DOMContentLoaded', () => {
         placeholder: 'İçeriğinizi buraya yazın...'
     });
 
+
+    // DEĞİŞTİ: Kategorileri çeken fonksiyon geri geldi
+    const fetchCategories = async () => {
+        try {
+            const response = await fetch('/api/categories');
+            if (!response.ok) throw new Error('Kategoriler yüklenemedi.');
+            
+            const categories = await response.json();
+            
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category.id;
+                option.textContent = category.name;
+                categorySelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error(error);
+            messageElement.textContent = 'Kategoriler yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.';
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         messageElement.textContent = '';
         messageElement.style.color = 'red';
 
         const title = titleInput.value;
-        const content = quill.root.innerHTML; // HTML içeriğini al
+        const content = quill.root.innerHTML; 
         
-        // DEĞİŞTİ: Kategori ID kaldırıldı
-        // const category_id = categorySelect.value;
+        // DEĞİŞTİ: Kategori ID geri geldi
+        const category_id = categorySelect.value;
 
         if (!title.trim() || !content.trim() || content === '<p><br></p>') {
             messageElement.textContent = 'Başlık ve içerik alanları boş bırakılamaz.';
             return;
         }
 
-        // DEĞİŞTİ: Kategori ID kontrolü kaldırıldı
-        // if (!category_id) {
-        //     messageElement.textContent = 'Lütfen bir kategori seçin.';
-        //     return;
-        // }
+        // DEĞİŞTİ: Kategori ID kontrolü geri geldi
+        if (!category_id) {
+            messageElement.textContent = 'Lütfen bir kategori seçin.';
+            return;
+        }
         
-        // İçeriği XSS'e karşı temizle (DOMPurify)
         const cleanContent = DOMPurify.sanitize(content);
 
         try {
@@ -54,9 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     title: title, 
-                    content: cleanContent
-                    // DEĞİŞTİ: category_id gönderilmiyor
-                    // category_id: category_id
+                    content: cleanContent,
+                    // DEĞİŞTİ: category_id gönderiliyor
+                    category_id: category_id
                 }),
                 credentials: 'include'
             });
@@ -67,7 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageElement.textContent = 'Konunuz başarıyla yayınlandı! Yönlendiriliyorsunuz...';
                 messageElement.style.color = 'green';
                 setTimeout(() => {
-                    // Kullanıcıyı yeni açtığı konuya yönlendir
                     window.location.href = `/thread.html?id=${data.post.id}`;
                 }, 2000);
             } else {
@@ -78,12 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
             messageElement.textContent = error.message;
         }
     };
-
-    // DEĞİŞTİ: Kategori çekme fonksiyonu kaldırıldı
-    // const fetchCategories = async () => { ... };
     
     submitForm.addEventListener('submit', handleSubmit);
     
-    // DEĞİŞTİ: Kategori çekme fonksiyonu çağrısı kaldırıldı
-    // fetchCategories();
+    // DEĞİŞTİ: Kategorileri çek
+    fetchCategories();
 });

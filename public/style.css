@@ -588,3 +588,46 @@
 .archive-link:hover {
     text-decoration: underline;
 }
+
+/* === ARŞİV SAYFASI KATEGORİ FİLTRELERİ === */
+
+.category-filters {
+    max-width: 900px;
+    margin: 0 auto 15px auto;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    display: flex;
+    flex-wrap: wrap; /* Mobil için */
+    align-items: center;
+    gap: 10px;
+}
+
+.category-filters p {
+    margin: 0;
+    font-weight: bold;
+    color: #333;
+}
+
+.filter-btn {
+    padding: 5px 10px;
+    font-size: 0.9em;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    color: #005A9C;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.filter-btn:hover {
+    background-color: #f0f0f0;
+}
+
+.filter-btn.active {
+    background-color: #005A9C;
+    color: white;
+    border-color: #005A9C;
+    font-weight: bold;
+}

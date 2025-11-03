@@ -1,63 +1,71 @@
 document.addEventListener('DOMContentLoaded', () => {
     const authLinksContainer = document.getElementById('auth-links');
-    const logoutButton = document.getElementById('logout-button');
 
-    const checkAuthStatus = async () => {
+    const checkUserStatus = async () => {
         try {
             const response = await fetch('/api/user-status', {
-                credentials: 'include'
+                credentials: 'include' 
             });
             
             if (!response.ok) {
-                 // API hatası (sunucu kapalı vb.) durumunda
-                 return { loggedIn: false };
+                // Sunucu hatası veya ulaşılamıyor
+                console.error('Sunucu durumu alınamadı:', response.status);
+                renderAuthLinks({ loggedIn: false });
+                return { loggedIn: false };
             }
 
             const data = await response.json();
+            renderAuthLinks(data);
             
-            // Sayfa korumasını kontrol et
-            checkPageAuth(data); // DEĞİŞTİ: 'data' buraya parametre olarak verildi
-            
-            // Header'daki linkleri ayarla
-            if (authLinksContainer) {
-                if (data.loggedIn) {
-                    let adminLink = '';
-                    if (data.user.role === 'admin') {
-                        adminLink = '<a href="/admin.html" class="auth-button admin">Admin Paneli</a>';
-                    }
-                    authLinksContainer.innerHTML = `
-                        ${adminLink}
-                        <span class="welcome-user">Hoş geldin, ${data.user.username}!</span>
-                        <button id="global-logout-btn" class="auth-button">Çıkış Yap</button>
-                    `;
-                    document.getElementById('global-logout-btn').addEventListener('click', handleLogout);
-                } else {
-                    authLinksContainer.innerHTML = `
-                        <a href="/login.html" class="auth-button">Giriş Yap</a>
-                        <a href="/register.html" class="auth-button">Kayıt Ol</a>
-                    `;
-                }
-            }
-            
-            return data; // Diğer script'lerin kullanabilmesi için (örn: thread.js)
+            // YENİ: Admin sayfası koruması
+            checkPageAuth(data); 
 
+            return data; 
         } catch (error) {
-            console.error('Yetkilendirme durumu alınamadı:', error);
-            checkPageAuth({ loggedIn: false }); // Hata durumunda çıkış yapmış say
+            console.error('Kullanıcı durumu kontrol edilemedi:', error);
+            renderAuthLinks({ loggedIn: false }); 
+            checkPageAuth({ loggedIn: false }); // Hata durumunda da korumayı çalıştır
             return { loggedIn: false };
+        }
+    };
+
+    const renderAuthLinks = (data) => {
+        if (authLinksContainer) {
+            
+            let adminLinkHTML = '';
+            // YENİ: Admin linki kontrolü
+            if (data.loggedIn && data.user.role === 'admin') {
+                adminLinkHTML = '<a href="admin.html" class="nav-link admin-link">Admin Panel</a>';
+            }
+
+            if (data.loggedIn) {
+                // DEĞİŞTİ: Admin linki ve Profil linki eklendi
+                authLinksContainer.innerHTML = `
+                    ${adminLinkHTML}
+                    <a href="profile.html?username=${data.user.username}" class="nav-link profile-link">${data.user.username}</a>
+                    <button id="logout-button" class="logout-btn">Çıkış Yap</button>
+                `;
+                document.getElementById('logout-button').addEventListener('click', handleLogout);
+            } else {
+                authLinksContainer.innerHTML = `
+                    <a href="login.html" class="nav-link">Giriş</a>
+                    <a href="register.html" class="nav-link">Kayıt</a>
+                `;
+            }
         }
     };
 
     const handleLogout = async () => {
         try {
             await fetch('/logout', { method: 'POST', credentials: 'include' });
-            window.location.href = '/index.html'; // Çıkış yapınca ana sayfaya git
+            window.location.href = '/index.html'; 
         } catch (error) {
             console.error('Çıkış yapılamadı:', error);
         }
     };
 
-    // DEĞİŞTİ: Bu fonksiyon artık 'authData' parametresi alıyor
+    // YENİ: Sayfa koruma fonksiyonu
+    // Bu fonksiyon, admin.html gibi sayfaları korur
     function checkPageAuth(authData) {
         const authRequirement = document.body.dataset.auth;
         const currentPath = window.location.pathname + window.location.search;
@@ -69,8 +77,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.location.href = `/login.html?redirect=${encodeURIComponent(currentPath)}`;
             }
         } 
-        // YENİ: Admin GEREKTİREN sayfalar (admin.html)
         else if (authRequirement === 'admin') {
+            // Sadece admin GEREKTİREN sayfalar (admin.html)
             if (!authData.loggedIn || authData.user.role !== 'admin') {
                 // Giriş yapmamışsa VEYA giriş yapmış ama admin değilse
                 alert('Bu sayfaya erişim yetkiniz yok.');
@@ -81,10 +89,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Ana fonksiyonu çalıştır
-    checkAuthStatus();
-
-    // Eğer sayfada özel (form içi) logout butonu varsa (örn: submit.html)
-    if (logoutButton) {
-        logoutButton.addEventListener('click', handleLogout);
-    }
+    checkUserStatus();
 });
