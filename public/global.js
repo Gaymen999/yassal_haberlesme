@@ -1,20 +1,21 @@
-// public/global.js (DOĞRU KOD)
-
 document.addEventListener('DOMContentLoaded', async () => {
     // Sadece header'daki linkleri seç
     const authLinks = document.getElementById('auth-links');
     let isAdmin = false;
-    let userId = null;
 
-    // data-auth="true" olan sayfaları koru
+    // --- YENİ: KORUMA KONTROLLERİ ---
+    // Sayfa, "giriş yapmış" olmayı gerektiriyor mu?
     const bodyAuth = document.body.dataset.auth === 'true';
+    // Sayfa, "admin" olmayı gerektiriyor mu?
+    const bodyAdmin = document.body.dataset.auth === 'admin';
+    // --- BİTTİ ---
 
     try {
         const response = await fetch('/api/user-status', { credentials: 'include' });
         const data = await response.json();
         
         if (data.loggedIn) {
-            userId = data.user.id;
+            // Kullanıcı giriş yapmış
             isAdmin = data.user.role === 'admin';
             
             // Header linklerini ayarla
@@ -31,22 +32,38 @@ document.addEventListener('DOMContentLoaded', async () => {
                 window.location.href = '/login.html';
             });
 
+            // --- YENİ: Admin Sayfası Koruması ---
+            // Eğer sayfa admin yetkisi istiyorsa (bodyAdmin true ise)
+            // AMA kullanıcı admin değilse (isAdmin false ise)
+            if (bodyAdmin && !isAdmin) {
+                // Admin olmayan kullanıcıyı ana sayfaya at
+                alert('Bu sayfaya erişim yetkiniz yok.');
+                window.location.href = '/index.html';
+            }
+            // --- BİTTİ ---
+
         } else {
-            // Kullanıcı giriş yapmamışsa header linklerini ayarla
+            // Kullanıcı giriş yapmamış
+            
+            // Header linklerini ayarla
             authLinks.innerHTML = `
                 <a href="login.html">Giriş Yap</a>
                 <a href="register.html">Kayıt Ol</a>
             `;
             
-            // Eğer sayfa korumalıysa (data-auth="true") ve kullanıcı giriş yapmamışsa, login'e yolla
-            if (bodyAuth) {
+            // --- GÜNCELLENDİ: Hem normal hem de admin sayfaları için koruma ---
+            // Eğer sayfa giriş (bodyAuth) VEYA admin (bodyAdmin) yetkisi istiyorsa
+            // ve kullanıcı giriş yapmamışsa, onu login'e yolla
+            if (bodyAuth || bodyAdmin) {
                 window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
             }
+            // --- BİTTİ ---
         }
     } catch (error) {
         console.error('Kullanıcı durumu hatası:', error);
-        // Hata durumunda, korumalı sayfadaysa login'e yolla
-        if (bodyAuth) {
+        
+        // Hata durumunda, korumalı sayfalardaysa (normal veya admin) login'e yolla
+        if (bodyAuth || bodyAdmin) {
             window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
         }
     }
