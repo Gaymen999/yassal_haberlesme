@@ -1,457 +1,457 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const threadContainer = document.getElementById('thread-container');
+document.addEventListener('DOMContentLoaded', async () => {
+    // --- 1. ELEMENTLERİ SEÇ ---
+    const threadMainPost = document.getElementById('thread-main-post');
+    const repliesContainer = document.getElementById('replies-container');
+    const repliesHeader = document.getElementById('replies-header');
     const replyFormContainer = document.getElementById('reply-form-container');
-    const loadingMessage = document.getElementById('loading-message');
-    
-    let currentUserIsAdmin = false;
-    let currentUserId = null; 
-    let currentThread = null; 
+    const paginationContainerTop = document.getElementById('pagination-container-top');
+    const paginationContainerBottom = document.getElementById('pagination-container-bottom');
+    const adminControlsContainer = document.getElementById('admin-controls-container');
+    const pageTitle = document.querySelector('title');
+
+    // --- 2. GEREKLİ BİLGİLERİ AL ---
     const params = new URLSearchParams(window.location.search);
     const threadId = params.get('id');
-    const currentPage = parseInt(params.get('page'), 10) || 1;
-    let replyQuill = null; 
-    const replyToolbarOptions = [
-        ['bold', 'italic', 'underline', 'strike'],
-        ['blockquote', 'code-block'],
-        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-        ['link', 'image'],
-        ['clean']
-    ];
+    const page = params.get('page') || 1; 
 
     if (!threadId) {
-        threadContainer.innerHTML = '<h2 style="color:red;">Hata: Konu ID bulunamadı.</h2>';
+        window.location.href = '/index.html';
         return;
     }
 
-    const fetchThreadAndReplies = async () => {
-        try {
-            const response = await fetch(`/api/threads/${threadId}?page=${currentPage}`, {
-                credentials: 'include'
-            });
-            if (!response.ok) throw new Error('Konu yüklenirken bir hata oluştu.');
+    let isAdmin = false;
+    let userId = null;
+    let currentThread = null; 
+    let replyQuill = null; 
 
-            const data = await response.json();
-            const { thread, replies, pagination, bestReply } = data; 
-            
-            currentThread = thread; 
-            document.title = thread.title;
-            threadContainer.innerHTML = ''; 
-            loadingMessage.style.display = 'none';
-
-            await checkAuthAndRenderReplyForm(); 
-            
-            renderPagination(pagination, "top"); 
-            renderOriginalPost(thread);
-            if (bestReply && currentPage === 1) {
-                renderBestAnswerBox(bestReply);
+    // --- 3. KULLANICI DURUMUNU KONTROL ET ---
+    try {
+        const statusResponse = await fetch('/api/user-status', { credentials: 'include' });
+        if (statusResponse.ok) {
+            const data = await statusResponse.json();
+            if (data.loggedIn) {
+                userId = data.user.id;
+                isAdmin = data.user.role === 'admin';
             }
-            renderReplies(replies, bestReply ? bestReply.id : null); 
-            renderPagination(pagination, "bottom"); 
-
-            attachReactionListeners(threadContainer);
-
-        } catch (error) {
-            console.error(error);
-            loadingMessage.textContent = `Hata: ${error.message}`;
-            loadingMessage.style.color = 'red';
         }
-    };
+    } catch (error) {
+        console.warn('Kullanıcı durumu kontrol edilemedi:', error);
+    }
+
+    // --- 4. YARDIMCI RENDER FONKSİYONLARI ---
     
-    // --- Yardımcı Fonksiyonlar ---
-
-    // DEĞİŞTİ: renderUserProfile (Kullanıcı adı artık bir link)
-    function renderUserProfile(author) { 
-        const joinDate = new Date(author.author_join_date).toLocaleDateString('tr-TR');
-        const safeUsername = DOMPurify.sanitize(author.author_username);
-        const safeAvatar = DOMPurify.sanitize(author.author_avatar);
-        const safeTitle = DOMPurify.sanitize(author.author_title);
-        const safePostCount = DOMPurify.sanitize(author.author_post_count);
-
+    // Sol taraftaki yazar bilgisi kutusunu oluşturur
+    const renderAuthorInfo = (username, avatar, title, postCount, joinDate) => {
+        const joinDateFormatted = new Date(joinDate).toLocaleDateString('tr-TR', { year: 'numeric', month: 'long' });
+        const safeAvatar = DOMPurify.sanitize(avatar || 'default_avatar.png');
+        const safeUsername = DOMPurify.sanitize(username);
+        const safeTitle = DOMPurify.sanitize(title || 'Yeni Üye');
+        
         return `
-            <div class="user-profile-sidebar">
-                <img src="${safeAvatar}" alt="${safeUsername} Avatar" class="avatar">
-                
-                <a href="/profile.html?username=${encodeURIComponent(safeUsername)}" class="profile-link">
-                    <strong class="username">${safeUsername}</strong>
-                </a>
-                
+            <div class="author-info">
+                <img src="${safeAvatar}" alt="${safeUsername} avatar" class="avatar">
+                <a href="profile.html?username=${safeUsername}" class="username">${safeUsername}</a>
                 <span class="user-title">${safeTitle}</span>
-                <hr>
-                <span class="user-stat">Katılım: ${joinDate}</span>
-                <span class="user-stat">Mesaj: ${safePostCount}</span>
+                <span class="user-stat">Mesaj: ${postCount || 0}</span>
+                <span class="user-stat">Katılım: ${joinDateFormatted}</span>
             </div>
         `;
-    }
+    };
 
-    // (renderOriginalPost fonksiyonu aynı kaldı)
-    function renderOriginalPost(thread) {
-        const postElement = document.createElement('div');
-        postElement.className = 'original-post post-layout'; 
-        const date = new Date(thread.created_at).toLocaleString('tr-TR');
-        const safeTitle = DOMPurify.sanitize(thread.title);
-        const safeContent = DOMPurify.sanitize(thread.content);
-        const lockButtonText = thread.is_locked ? 'Kilidi Aç' : 'Konuyu Kilitle';
-        const adminControls = currentUserIsAdmin ? `
-            <div class="admin-actions-reply">
-                <button class="lock-thread-btn" data-id="${thread.id}" data-locked="${thread.is_locked}" style="background-color: #f0ad4e;">
-                    ${lockButtonText}
-                </button>
-                <button class="delete-thread-btn" data-id="${thread.id}">Konuyu Sil</button>
-            </div>
-        ` : '';
-        const lockIcon = thread.is_locked ? '🔒 ' : '';
-        postElement.innerHTML = `
-            ${renderUserProfile(thread)} 
-            <div class="post-main-content"> 
-                ${adminControls} 
-                <h2>${lockIcon}${safeTitle}</h2> 
-                <p class="post-meta">
-                    Tarih: ${date} | Kategori: <strong>${thread.category_name}</strong>
-                </p>
-                <div class="post-content">
-                    ${safeContent}
-                </div>
-                ${renderReactionArea(thread, 'thread')}
-            </div>
-        `;
-        threadContainer.appendChild(postElement);
-        if (currentUserIsAdmin) {
-            postElement.querySelector('.delete-thread-btn')?.addEventListener('click', (e) => {
-                const threadId = e.target.dataset.id;
-                handleDeleteThread(threadId, safeTitle);
-            });
-            postElement.querySelector('.lock-thread-btn')?.addEventListener('click', (e) => {
-                const threadId = e.target.dataset.id;
-                const isLocked = e.target.dataset.locked === 'true';
-                handleToggleLockThread(threadId, !isLocked); 
-            });
-        }
-    }
+    // Sağ alttaki Beğen/Beğenmekten Vazgeç butonlarını oluşturur
+    const renderPostActions = (item, type, currentUserId) => {
+        const isLiked = currentUserId && item.liked_by_users && item.liked_by_users.includes(currentUserId);
+        const likeAction = currentUserId ? 
+            `<button class="like-btn ${isLiked ? 'liked' : ''}" data-id="${item.id}" data-type="${type}">
+                ${isLiked ? 'Beğenmekten Vazgeç' : 'Beğen'} (${item.like_count || 0})
+            </button>` :
+            `<span class="like-count">Beğeni: ${item.like_count || 0}</span>`;
+            
+        return `<div class="post-actions">${likeAction}</div>`;
+    };
 
-    // (renderBestAnswerBox fonksiyonu aynı kaldı)
-    function renderBestAnswerBox(bestReply) {
-        const bestAnswerContainer = document.createElement('div');
-        bestAnswerContainer.className = 'best-answer-box post-layout';
-        bestAnswerContainer.id = `best-reply-${bestReply.id}`;
-        const date = new Date(bestReply.created_at).toLocaleString('tr-TR');
-        const safeContent = DOMPurify.sanitize(bestReply.content);
-        bestAnswerContainer.innerHTML = `
-            ${renderUserProfile(bestReply)} 
-            <div class="post-main-content"> 
-                <h3 class="best-answer-title">✅ En İyi Cevap</h3>
-                <p class="reply-meta">Tarih: ${date}</p>
-                <div class="reply-content">
-                    ${safeContent}
-                </div>
-                ${renderReactionArea(bestReply, 'reply')}
-            </div>
-        `;
-        threadContainer.appendChild(bestAnswerContainer);
-    }
-    
-    // (renderReplies fonksiyonu aynı kaldı)
-    function renderReplies(replies, bestReplyId) { 
-        const repliesContainer = document.createElement('div');
-        repliesContainer.className = 'replies-container';
-        const filteredReplies = replies.filter(reply => reply.id !== bestReplyId);
-        if (filteredReplies.length === 0) {
-            if (currentPage === 1 && !bestReplyId) { 
-                repliesContainer.innerHTML = '<h3>Bu konuya henüz cevap yazılmamış.</h3>';
-            } else if (filteredReplies.length === 0) { 
-                repliesContainer.innerHTML = '<h3>Bu sayfada başka cevap bulunmuyor.</h3>';
-            }
-        } else {
-            repliesContainer.innerHTML = `<h3>Cevaplar</h3>`;
-            filteredReplies.forEach(reply => {
-                const replyElement = document.createElement('div');
-                replyElement.className = 'reply-card post-layout'; 
-                replyElement.id = `reply-${reply.id}`; 
-                const date = new Date(reply.created_at).toLocaleString('tr-TR');
-                const safeContent = DOMPurify.sanitize(reply.content);
-                let adminControls = '';
-                if (currentUserIsAdmin) {
-                    const isCurrentBest = (reply.id === currentThread.best_reply_id);
-                    const bestAnswerButton = isCurrentBest 
-                        ? `<button class="unmark-best-btn" data-thread-id="${currentThread.id}" data-reply-id="null">İşareti Kaldır</button>`
-                        : `<button class="mark-best-btn" data-thread-id="${currentThread.id}" data-reply-id="${reply.id}">En İyi Cevap Yap</button>`;
-                    adminControls = `
-                        <div class="admin-actions-reply">
-                            ${bestAnswerButton}
-                            <button class="delete-reply-btn" data-id="${reply.id}">Sil</button>
-                        </div>
-                    `;
-                }
-                replyElement.innerHTML = `
-                    ${renderUserProfile(reply)} 
-                    <div class="post-main-content"> 
-                        ${adminControls} 
-                        <p class="reply-meta">Tarih: ${date}</p>
-                        <div class="reply-content">
-                            ${safeContent}
-                        </div>
-                        ${renderReactionArea(reply, 'reply')}
-                    </div>
-                `;
-                repliesContainer.appendChild(replyElement);
-            });
+    // Admin (Kilitle/Sil) butonlarını oluşturur
+    const renderAdminControls = (thread) => {
+        if (!isAdmin) {
+            adminControlsContainer.innerHTML = '';
+            return;
         }
-        threadContainer.appendChild(repliesContainer);
-        if (currentUserIsAdmin) {
-            repliesContainer.querySelectorAll('.delete-reply-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const replyId = e.target.dataset.id;
-                    handleDeleteReply(replyId);
-                });
-            });
-            repliesContainer.querySelectorAll('.mark-best-btn, .unmark-best-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const threadId = e.target.dataset.threadId;
-                    const replyId = e.target.dataset.replyId === 'null' ? null : parseInt(e.target.dataset.replyId, 10);
-                    handleMarkAsBest(threadId, replyId);
-                });
-            });
-        }
-    }
 
-    // (renderReactionArea fonksiyonu aynı kaldı)
-    function renderReactionArea(post, postType) {
-        const likeCount = post.like_count ? parseInt(post.like_count, 10) : 0;
-        const likedByArray = post.liked_by_users || [];
-        const userHasLiked = currentUserId ? likedByArray.includes(currentUserId) : false;
-        const likeButtonText = userHasLiked ? 'Beğenildi' : 'Beğen';
-        const likeButtonClass = userHasLiked ? 'like-btn liked' : 'like-btn';
-        const disabledAttr = currentUserId ? '' : 'disabled'; 
-        return `
-            <div class="reaction-bar">
-                <button class="${likeButtonClass}" 
-                        data-post-id="${post.id}" 
-                        data-post-type="${postType}" 
-                        ${disabledAttr}>
-                    👍 ${likeButtonText}
-                </button>
-                <span class="like-count">${likeCount}</span>
-            </div>
+        const lockButtonText = thread.is_locked ? 'Konu Kilidini Aç' : 'Konuyu Kilitle';
+        
+        adminControlsContainer.innerHTML = `
+            <h4>Admin Kontrolleri</h4>
+            <button id="lock-thread-btn" class="admin-btn">${lockButtonText}</button>
+            <button id="delete-thread-btn" class="admin-btn delete">Konuyu Sil</button>
         `;
-    }
-    
-    // (renderPagination, checkAuthAndRenderReplyForm, renderReplyForm, handleReplySubmit,
-    // handleDeleteReply, handleDeleteThread, handleToggleLockThread, handleMarkAsBest,
-    // attachReactionListeners, handleReaction fonksiyonları aynı kaldı)
-    function renderPagination(pagination, position) { /* ... (içerik aynı) ... */ 
+
+        // Event listener'ları ekle
+        document.getElementById('lock-thread-btn').addEventListener('click', () => handleLockThread(thread.id, thread.is_locked));
+        document.getElementById('delete-thread-btn').addEventListener('click', () => handleDeleteThread(thread.id));
+    };
+
+    // Sayfalama (Pagination) linklerini oluşturur
+    const renderPagination = (pagination) => {
         const { currentPage, totalPages } = pagination;
-        if (totalPages <= 1) return; 
-        const paginationNav = document.createElement('nav');
-        paginationNav.className = 'pagination';
-        paginationNav.dataset.position = position; 
+        paginationContainerTop.innerHTML = '';
+        paginationContainerBottom.innerHTML = '';
+        if (totalPages <= 1) return;
+
         let paginationHTML = '';
-        if (currentPage > 1) paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage - 1}" class="page-link prev">Önceki</a>`;
-        if (currentPage > 2) {
-             paginationHTML += `<a href="/thread.html?id=${threadId}&page=1" class="page-link">1</a>`;
-             if (currentPage > 3) paginationHTML += `<span class="page-dots">...</span>`;
+        
+        // Önceki
+        if (currentPage > 1) {
+            paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage - 1}" class="page-link prev">Önceki</a>`;
         }
-        if (currentPage > 1) paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage - 1}" class="page-link">${currentPage - 1}</a>`;
+        // İlk sayfa
+        if (currentPage > 2) {
+            paginationHTML += `<a href="/thread.html?id=${threadId}&page=1" class="page-link">1</a>`;
+        }
+        // ... (boşluk)
+        if (currentPage > 3) {
+            paginationHTML += `<span class="page-dots">...</span>`;
+        }
+        // Mevcuttan bir önceki
+        if (currentPage > 1) {
+            paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage - 1}" class="page-link">${currentPage - 1}</a>`;
+        }
+        // Mevcut sayfa
         paginationHTML += `<span class="page-link current">${currentPage}</span>`;
-        if (currentPage < totalPages) paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage + 1}" class="page-link">${currentPage + 1}</a>`;
+        // Mevcuttan bir sonraki
+        if (currentPage < totalPages) {
+            paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage + 1}" class="page-link">${currentPage + 1}</a>`;
+        }
+        // ... (boşluk)
+        if (currentPage < totalPages - 2) {
+            paginationHTML += `<span class="page-dots">...</span>`;
+        }
+        // Son sayfa
         if (currentPage < totalPages - 1) {
-            if (currentPage < totalPages - 2) paginationHTML += `<span class="page-dots">...</span>`;
             paginationHTML += `<a href="/thread.html?id=${threadId}&page=${totalPages}" class="page-link">${totalPages}</a>`;
         }
-        if (currentPage < totalPages) paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage + 1}" class="page-link next">Sonraki</a>`;
-        paginationNav.innerHTML = paginationHTML;
-        if(position === 'top') threadContainer.insertAdjacentElement('beforebegin', paginationNav);
-        else threadContainer.insertAdjacentElement('afterend', paginationNav);
-    }
-    async function checkAuthAndRenderReplyForm() { /* ... (içerik aynı) ... */ 
-        if (currentThread && currentThread.is_locked) {
-            replyFormContainer.innerHTML = `<div class="locked-message">🔒 Bu konu kilitlenmiştir. Yeni cevap yazılamaz.</div>`;
-            try {
-                const res = await fetch('/api/user-status', { credentials: 'include' });
-                const data = await res.json();
-                if (data.loggedIn) {
-                    currentUserId = data.user.id; 
-                    if (data.user.role === 'admin') currentUserIsAdmin = true;
-                }
-            } catch (error) { /* ignore */ }
-            return; 
+        // Sonraki
+        if (currentPage < totalPages) {
+            paginationHTML += `<a href="/thread.html?id=${threadId}&page=${currentPage + 1}" class="page-link next">Sonraki</a>`;
         }
-        try {
-            const res = await fetch('/api/user-status', { credentials: 'include' });
-            const data = await res.json();
-            if (data.loggedIn) {
-                currentUserId = data.user.id; 
-                if (data.user.role === 'admin') currentUserIsAdmin = true;
-                renderReplyForm();
-            } else {
-                currentUserId = null; 
-                currentUserIsAdmin = false;
-                replyFormContainer.innerHTML = `<p style="text-align:center; font-weight:bold;">Beğenmek ve cevap yazabilmek için <a href="/login.html?redirect=/thread.html?id=${threadId}&page=${currentPage}">giriş yapmanız</a> gerekmektedir.</p>`;
-            }
-        } catch (error) { console.error('Kullanıcı durumu kontrol hatası:', error); currentUserIsAdmin = false; }
-    }
-    function renderReplyForm() { /* ... (içerik aynı) ... */ 
+        
+        paginationContainerTop.innerHTML = paginationHTML;
+        paginationContainerBottom.innerHTML = paginationHTML;
+    };
+
+    // Cevap yazma formunu (Quill editor) oluşturur
+    const renderReplyForm = (thread) => {
+        replyFormContainer.innerHTML = '';
+        
+        if (thread.is_locked) {
+            replyFormContainer.innerHTML = '<p class="locked-message">Bu konu kilitlendiği için yeni cevap yazılamaz.</p>';
+            return;
+        }
+        
+        if (!userId) {
+            replyFormContainer.innerHTML = `<p class="login-prompt">Cevap yazmak için lütfen <a href="/login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}">giriş yapın</a>.</p>`;
+            return;
+        }
+        
         replyFormContainer.innerHTML = `
-            <form id="reply-form" class="reply-form">
-                <h3>Cevap Yaz</h3>
+            <h3>Cevap Yaz</h3>
+            <form id="reply-form">
                 <div class="form-group">
-                    <div id="reply-editor-container" style="background-color: white; height: 200px;"></div>
+                    <div id="reply-editor" style="background-color: white; height: 200px;"></div>
                 </div>
                 <button type="submit" class="submit-btn">Cevabı Gönder</button>
                 <p id="reply-message" class="form-message"></p>
             </form>
         `;
-        replyQuill = new Quill('#reply-editor-container', {
-            modules: { toolbar: replyToolbarOptions },
+        
+        replyQuill = new Quill('#reply-editor', {
             theme: 'snow',
-            placeholder: 'Cevabınızı buraya yazın...'
+            modules: { 
+                toolbar: [
+                    ['bold', 'italic', 'underline'], 
+                    ['link', 'blockquote', 'code-block'], 
+                    [{ 'list': 'ordered'}, { 'list': 'bullet' }]
+                ] 
+            }
         });
+        
         document.getElementById('reply-form').addEventListener('submit', handleReplySubmit);
-    }
-    async function handleReplySubmit(e) { /* ... (içerik aynı) ... */ 
+    };
+
+    // --- 5. OLAY YÖNETİCİLERİ (Form Gönderme / Buton Tıklama) ---
+
+    // Cevap formunu gönderme
+    const handleReplySubmit = async (e) => {
         e.preventDefault();
-        const messageElement = document.getElementById('reply-message');
-        const content = replyQuill.root.innerHTML; 
-        if (!content || content === '<p><br></p>' || content.length < 10) { 
-            messageElement.textContent = 'Cevap en az 10 karakter olmalıdır.';
-            messageElement.style.color = 'red';
-            return; 
+        const content = replyQuill.root.innerHTML;
+        const messageEl = document.getElementById('reply-message');
+        
+        if (!content.trim() || content === '<p><br></p>') {
+            messageEl.textContent = 'Cevap içeriği boş olamaz.';
+            messageEl.style.color = 'red';
+            return;
         }
+        
         try {
             const response = await fetch(`/api/threads/${threadId}/reply`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({ content: DOMPurify.sanitize(content) }),
                 credentials: 'include'
             });
+            
             const data = await response.json();
+            
             if (response.ok) {
-                window.location.href = `/thread.html?id=${threadId}&page=${data.lastPage}#reply-${data.reply.id}`;
+                messageEl.textContent = 'Cevap eklendi! Sayfa yenileniyor...';
+                messageEl.style.color = 'green';
+                // Kullanıcıyı son sayfaya (yeni cevabının olduğu sayfaya) yönlendir
+                window.location.href = `/thread.html?id=${threadId}&page=${data.lastPage}#reply-${data.replyId}`;
             } else {
-                if (response.status === 403) {
-                    messageElement.textContent = 'Bu konu kilitlendiği için cevap gönderilemedi.';
-                    messageElement.style.color = 'red';
-                } else {
-                    throw new Error(data.message || 'Cevap gönderilemedi.');
-                }
+                throw new Error(data.message);
             }
         } catch (error) {
-            messageElement.textContent = error.message;
-            messageElement.style.color = 'red';
+            messageEl.textContent = error.message;
+            messageEl.style.color = 'red';
         }
-    }
-    async function handleDeleteReply(replyId) { /* ... (içerik aynı) ... */ 
-        if (!confirm("Bu cevabı kalıcı olarak silmek istediğinizden emin misiniz?")) return;
-        try {
-            const response = await fetch(`/admin/replies/${replyId}`, { method: 'DELETE', credentials: 'include' });
-            if (response.ok) {
-                const replyElement = document.getElementById(`reply-${replyId}`);
-                if (replyElement) {
-                    replyElement.style.opacity = '0';
-                    setTimeout(() => replyElement.remove(), 300);
-                }
-            } else {
-                const data = await response.json();
-                alert(`Silme işlemi başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
-        } catch (error) { console.error('Cevap silme hatası:', error); alert('Sunucuya bağlanılamadı.'); }
-    }
-    async function handleDeleteThread(threadId, postTitle) { /* ... (içerik aynı) ... */ 
-        if (!confirm(`DİKKAT! "${postTitle}" başlıklı konuyu ve TÜM CEVAPLARINI kalıcı olarak silmek istediğinizden emin misiniz?`)) return;
-        try {
-            const response = await fetch(`/admin/posts/${threadId}`, { method: 'DELETE', credentials: 'include' });
-            if (response.ok) {
-                alert('Konu ve tüm cevapları başarıyla silindi.');
-                window.location.href = '/'; 
-            } else {
-                const data = await response.json();
-                alert(`Silme işlemi başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
-        } catch (error) { console.error('Konu silme hatası:', error); alert('Sunucuya bağlanılamadı.'); }
-    }
-    async function handleToggleLockThread(threadId, newLockStatus) { /* ... (içerik aynı) ... */ 
-        const actionText = newLockStatus ? 'kilitlemek' : 'kilidini açmak';
-        if (!confirm(`Bu konuyu ${actionText} istediğinizden emin misiniz?`)) return;
-        try {
-            const response = await fetch(`/admin/posts/${threadId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_locked: newLockStatus }),
-                credentials: 'include'
-            });
-            if (response.ok) {
-                alert(`Konu başarıyla ${newLockStatus ? 'kilitlendi' : 'kilidi açıldı'}.`);
-                window.location.reload(); 
-            } else {
-                const data = await response.json();
-                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
-        } catch (error) { console.error('Konu kilitleme hatası:', error); alert('Sunucuya bağlanılamadı.'); }
-    }
-    async function handleMarkAsBest(threadId, replyId) { /* ... (içerik aynı) ... */ 
-        const actionText = replyId ? 'işaretlemek' : 'işaretini kaldırmak';
-        if (!confirm(`Bu cevabı "En İyi Cevap" olarak ${actionText} istediğinizden emin misiniz?`)) return;
-        try {
-            const response = await fetch('/admin/mark-best-reply', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ threadId, replyId }),
-                credentials: 'include'
-            });
-            if (response.ok) {
-                alert('En İyi Cevap başarıyla güncellendi.');
-                window.location.reload(); 
-            } else {
-                const data = await response.json();
-                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
-        } catch (error) { console.error('En İyi Cevap işaretleme hatası:', error); alert('Sunucuya bağlanılamadı.'); }
-    }
-    function attachReactionListeners(container) {
-        container.querySelectorAll('.like-btn').forEach(btn => {
-            btn.addEventListener('click', handleReaction);
-        });
-    }
-    async function handleReaction(e) { /* ... (içerik aynı) ... */ 
-        const button = e.target;
-        if (button.disabled) return; 
-        const postId = button.dataset.postId;
-        const postType = button.dataset.postType;
-        if (!postId || !postType) return;
-        const apiUrl = postType === 'thread' 
-            ? `/api/threads/${postId}/react` 
-            : `/api/replies/${postId}/react`;
-        button.disabled = true; 
-        try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                credentials: 'include',
-                headers: {'Content-Type': 'application/json'}
-            });
-            if (!response.ok) {
-                if (response.status === 401) {
-                    alert('Beğenmek için giriş yapmalısınız.');
-                    window.location.href = `/login.html?redirect=/thread.html?id=${threadId}&page=${currentPage}`;
-                }
-                throw new Error('Reaksiyon başarısız.');
-            }
-            const data = await response.json();
-            const likeCountElement = button.nextElementSibling;
-            let currentCount = parseInt(likeCountElement.textContent, 10);
-            if (data.liked) {
-                button.textContent = '👍 Beğenildi';
-                button.classList.add('liked');
-                likeCountElement.textContent = currentCount + 1;
-            } else {
-                button.textContent = '👍 Beğen';
-                button.classList.remove('liked');
-                likeCountElement.textContent = currentCount - 1;
-            }
-            button.disabled = false;
-        } catch (error) {
-            console.error('Reaksiyon hatası:', error);
-            button.disabled = false;
-        }
-    }
+    };
 
-    // Ana fonksiyonu çalıştır
-    fetchThreadAndReplies();
+    // Konuyu Kilitleme/Açma (Admin)
+    const handleLockThread = async (id, isCurrentlyLocked) => {
+        const actionText = isCurrentlyLocked ? 'kilidini açmak' : 'kilitlemek';
+        if (!confirm(`Bu konuyu ${actionText} istediğinize emin misiniz?`)) return;
+
+        try {
+            const response = await fetch(`/admin/posts/${id}`, { // Rota /admin/posts/:id (PUT)
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_locked: !isCurrentlyLocked }),
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                alert(`Konu başarıyla ${isCurrentlyLocked ? 'kilidi açıldı' : 'kilitlendi'}.`);
+                fetchThread(); // Sayfayı yenile
+            } else {
+                const data = await response.json();
+                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
+            }
+        } catch (error) {
+            console.error('Kilitleme hatası:', error);
+            alert('Sunucuya bağlanılamadı.');
+        }
+    };
+
+    // Konuyu Silme (Admin)
+    const handleDeleteThread = async (id) => {
+        if (!confirm('KONUYU SİLMEK istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm cevaplar da silinir!')) return;
+
+        try {
+            const response = await fetch(`/admin/posts/${id}`, { // Rota /admin/posts/:id (DELETE)
+                method: 'DELETE',
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                alert('Konu başarıyla silindi. Ana sayfaya yönlendiriliyorsunuz.');
+                window.location.href = '/index.html';
+            } else {
+                const data = await response.json();
+                alert(`Silme işlemi başarısız: ${data.message || 'Sunucu hatası.'}`);
+            }
+        } catch (error) {
+            console.error('Silme hatası:', error);
+            alert('Sunucuya bağlanılamadı.');
+        }
+    };
+    
+    // Beğeni ve En İyi Cevap için genel tıklama yöneticisi
+    document.body.addEventListener('click', async (e) => {
+        // Like Butonu
+        if (e.target.classList.contains('like-btn')) {
+            if (!userId) return alert('Beğeni yapmak için giriş yapmalısınız.');
+            
+            const btn = e.target;
+            const id = btn.dataset.id;
+            const type = btn.dataset.type; // 'thread' or 'reply'
+            const route = type === 'thread' ? `/api/threads/${id}/react` : `/api/replies/${id}/react`;
+            
+            try {
+                btn.disabled = true; // Çift tıklamayı engelle
+                const response = await fetch(route, { method: 'POST', credentials: 'include' });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    btn.textContent = `${data.action === 'liked' ? 'Beğenmekten Vazgeç' : 'Beğen'} (${data.like_count})`;
+                    btn.classList.toggle('liked', data.action === 'liked');
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                alert(`Hata: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        // En İyi Cevap Butonu
+        if (e.target.classList.contains('best-reply-btn')) {
+            if (!isAdmin) return; // Sadece admin tetikleyebilir (backend kuralı)
+            
+            const replyId = e.target.dataset.replyId;
+            if (!confirm('Bu cevabı "En İyi Cevap" olarak işaretlemek istediğinize emin misiniz?')) return;
+            
+            try {
+                e.target.disabled = true;
+                const response = await fetch(`/admin/posts/${threadId}/best-reply`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reply_id: replyId }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('En İyi Cevap başarıyla işaretlendi. Sayfa yenileniyor.');
+                    window.location.reload();
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                alert(`Hata: ${error.message}`);
+                e.target.disabled = false;
+            }
+        }
+    });
+
+    // --- 6. ANA VERİ ÇEKME FONKSİYONU ---
+    const fetchThread = async () => {
+        try {
+            const response = await fetch(`/api/threads/${threadId}?page=${page}`, { credentials: 'include' });
+            if (!response.ok) {
+                threadMainPost.innerHTML = `<p style="color:red;">Konu yüklenemedi. Ana sayfaya dönmek için <a href="/">tıklayın</a>.</p>`;
+                return;
+            }
+            
+            const data = await response.json();
+            const { thread, replies, bestReply, pagination } = data;
+            currentThread = thread; 
+            pageTitle.textContent = DOMPurify.sanitize(thread.title); // Sayfa başlığını güncelle
+
+            // Ana Konuyu Render Et
+            const safeTitle = DOMPurify.sanitize(thread.title);
+            const safeContent = DOMPurify.sanitize(thread.content);
+            threadMainPost.innerHTML = `
+                <div class="post-card original-post">
+                    ${renderAuthorInfo(
+                        thread.author_username, 
+                        thread.author_avatar, 
+                        thread.author_title, 
+                        thread.author_post_count, 
+                        thread.author_join_date
+                    )}
+                    <div class="post-content">
+                        <h2 class="thread-title">${safeTitle}</h2>
+                        ${thread.is_locked ? '<span class="locked-badge">🔒 KİLİTLİ</span>' : ''}
+                        ${thread.is_pinned ? '<span class="pinned-badge">⭐ SABİTLENMİŞ</span>' : ''}
+                        
+                        <div class="post-body ql-editor">${safeContent}</div>
+                        
+                        <div class="post-footer">
+                            ${renderPostActions(thread, 'thread', userId)}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Admin butonlarını render et
+            renderAdminControls(thread);
+
+            repliesContainer.innerHTML = ''; // Cevapları temizle
+
+            // En İyi Cevabı Render Et
+            if (bestReply) {
+                const bestReplyElement = document.createElement('div');
+                bestReplyElement.classList.add('post-card', 'reply', 'best-reply');
+                bestReplyElement.id = `reply-${bestReply.id}`; // ID ekle
+                const safeReplyContent = DOMPurify.sanitize(bestReply.content);
+                
+                bestReplyElement.innerHTML = `
+                    ${renderAuthorInfo(
+                        bestReply.author_username, 
+                        bestReply.author_avatar, 
+                        bestReply.author_title, 
+                        bestReply.author_post_count, 
+                        bestReply.author_join_date
+                    )}
+                    <div class="post-content">
+                        <div class="best-reply-badge">⭐ En İyi Cevap</div>
+                        <div class="post-body ql-editor">${safeReplyContent}</div>
+                        <div class="post-footer">
+                            ${renderPostActions(bestReply, 'reply', userId)}
+                        </div>
+                    </div>
+                `;
+                repliesContainer.appendChild(bestReplyElement);
+            }
+
+            // Diğer Cevapları Render Et
+            if (replies.length > 0) {
+                repliesHeader.textContent = `Cevaplar (${pagination.totalReplies})`;
+                
+                replies.forEach(reply => {
+                    // Eğer bu cevap zaten en iyi cevap olarak render edildiyse, atla
+                    if (bestReply && reply.id === bestReply.id) return; 
+                    
+                    const replyElement = document.createElement('div');
+                    replyElement.classList.add('post-card', 'reply');
+                    replyElement.id = `reply-${reply.id}`; // ID ekle
+                    const safeReplyContent = DOMPurify.sanitize(reply.content);
+                    
+                    // "En İyi Cevap" seçme butonu için mantık
+                    let bestReplyButton = '';
+                    
+                    // DÜZELTİLDİ: Artık sadece admin olması yeterli (backend kuralı)
+                    // Ve henüz bir en iyi cevap seçilmemişse
+                    if (isAdmin && !thread.best_reply_id) {
+                         bestReplyButton = `<button class="best-reply-btn" data-reply-id="${reply.id}">En İyi Cevap Seç</button>`;
+                    }
+
+                    replyElement.innerHTML = `
+                        ${renderAuthorInfo(
+                            reply.author_username, 
+                            reply.author_avatar, 
+                            reply.author_title, 
+                            reply.author_post_count, 
+                            reply.author_join_date
+                        )}
+                        <div class="post-content">
+                            <div class="post-body ql-editor">${safeReplyContent}</div>
+                            <div class="post-footer">
+                                ${renderPostActions(reply, 'reply', userId)}
+                                ${bestReplyButton}
+                            </div>
+                        </div>
+                    `;
+                    repliesContainer.appendChild(replyElement);
+                });
+            } else if (!bestReply) {
+                repliesHeader.textContent = 'Henüz cevap yazılmamış.';
+            }
+
+            // Sayfalamayı Render Et
+            renderPagination(pagination);
+            
+            // Cevap Formunu Render Et
+            renderReplyForm(thread);
+
+        } catch (error) {
+            console.error(error);
+            pageTitle.textContent = "Hata";
+            threadMainPost.innerHTML = `<p style="color:red;">Hata: Konu yüklenirken bir sorun oluştu.</p>`;
+        }
+    };
+    
+    // --- 7. BAŞLANGIÇ ---
+    fetchThread();
 });

@@ -5,19 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Paneli</title>
     <link rel="stylesheet" href="style.css">
-    </head>
+</head>
 <body data-auth="admin"> 
     <header>
         <h1>Admin Paneli</h1>
         <nav>
             <a href="index.html">Ana Sayfa</a>
-            <button id="logout-button" class="auth-button">Çıkış Yap</button>
+            <div id="auth-links" style="display: flex; gap: 15px;"></div>
         </nav>
     </header>
 
     <main>
+        <h2>Konu Yönetimi</h2>
+        
+        <p id="loading-message">Tüm konular yükleniyor...</p>
+        <div id="posts-management-container" class="posts-container">
+            </div>
         </main>
+    
+    <footer>
+        <p>&copy; 2025 Yassal Haberleşme</p>
+    </footer>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="global.js"></script>
     <script src="admin.js"></script>
 </body>

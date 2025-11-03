@@ -1,8 +1,9 @@
 document.addEventListener('DOMContentLoaded', async () => {
+    // 1. HTML'deki elementleri seç
     const container = document.getElementById('posts-management-container');
     const loadingMessage = document.getElementById('loading-message');
     
-    // --- Moderasyon İşlemleri (API Çağrıları) ---
+    // --- 2. Moderasyon İşlemleri (API Çağrıları) ---
 
     // Konu Sabitleme / Sabitlemeyi Kaldırma
     const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
@@ -32,90 +33,73 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Konu Silme
     const deletePost = async (postId, postTitle) => {
-        if (!confirm(`DİKKAT! "${postTitle}" başlıklı konuyu ve TÜM CEVAPLARINI kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
-            return;
-        }
+        if (!confirm(`"${postTitle}" başlıklı konuyu SİLMEK istediğinize emin misiniz? Bu işlem geri alınamaz!`)) return;
         
         try {
             const response = await fetch(`/admin/posts/${postId}`, {
                 method: 'DELETE',
                 credentials: 'include'
             });
-
+            
             if (response.ok) {
-                alert('Konu ve tüm cevapları başarıyla silindi.');
+                alert('Konu başarıyla silindi.');
                 fetchAllPosts(); // Listeyi yenile
             } else {
                 const data = await response.json();
                 alert(`Silme işlemi başarısız: ${data.message || 'Sunucu hatası.'}`);
             }
         } catch (error) {
-            console.error('Konu silme hatası:', error);
+            console.error('Silme hatası:', error);
             alert('Sunucuya bağlanılamadı.');
         }
     };
 
-    // --- Tüm Konuları Listeleme Fonksiyonu ---
+    // --- 3. Veri Yükleme Fonksiyonu ---
     const fetchAllPosts = async () => {
-        container.innerHTML = ''; 
-        loadingMessage.style.display = 'block'; 
-
         try {
-            // DEĞİŞTİ: '/admin/pending-posts' yerine '/api/posts' çağırılıyor
-            const response = await fetch('/api/posts', {
-                method: 'GET',
-                credentials: 'include' // Admin yetkimizi cookie ile gönderiyoruz
-            });
+            loadingMessage.style.display = 'block';
+            container.innerHTML = ''; 
+
+            // ***** DÜZELTME BURADA *****
+            // Hatalı adres '/api/posts/all' idi,
+            // Doğru adres '/api/posts/archive' (postRoutes.js'deki rotamız)
+            const response = await fetch('/api/posts/archive', { credentials: 'include' });
+            // ***** DÜZELTME BİTTİ *****
 
             if (!response.ok) {
-                if (response.status === 401 || response.status === 403) {
-                     // Bu durumun /api/posts'ta olmaması lazım ama olursa diye
-                     window.location.href = '/login.html';
-                } else {
-                     container.innerHTML = '<h3>Hata: Konuları çekerken sorun oluştu.</h3>';
-                }
-                loadingMessage.style.display = 'none';
-                return;
+                throw new Error('Sunucudan konular çekilemedi.');
             }
-
+            
             const posts = await response.json();
             loadingMessage.style.display = 'none';
 
             if (posts.length === 0) {
-                container.innerHTML = '<p>Yönetilecek hiç konu bulunamadı.</p>';
+                container.innerHTML = '<p>Yönetilecek konu bulunamadı.</p>';
                 return;
             }
-            
+
             posts.forEach(post => {
                 const postElement = document.createElement('div');
-                postElement.classList.add('post-card');
-                if (post.is_pinned) postElement.classList.add('pinned');
+                postElement.className = 'admin-post-card'; // CSS için class
                 
-                const date = new Date(post.created_at).toLocaleDateString('tr-TR');
-
-                // YENİ: XSS Koruması eklendi
+                // XSS Koruması
                 const safeTitle = DOMPurify.sanitize(post.title);
-                const safeAuthor = DOMPurify.sanitize(post.author_email);
+                const safeAuthor = DOMPurify.sanitize(post.author_username);
                 const safeCategory = DOMPurify.sanitize(post.category_name);
-
-                const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
+                const date = new Date(post.created_at).toLocaleString('tr-TR');
                 
                 postElement.innerHTML = `
-                    <div class="post-header">
-                        <h4 class="pending-title">
-                            <a href="/thread.html?id=${post.id}" target="_blank">${safeTitle} (ID: ${post.id})</a>
-                        </h4>
-                        <div class="actions">
-                            <button class="pin-toggle-btn" 
+                    <div class="admin-post-header">
+                        <a href="/thread.html?id=${post.id}" target="_blank">${safeTitle}</a>
+                        <div class="admin-controls">
+                            <button class="admin-btn pin-toggle-btn" 
                                 data-id="${post.id}" 
-                                data-pinned="${post.is_pinned}" 
-                                style="background-color: #2196F3;">
-                                ${pinButtonText}
+                                data-pinned="${post.is_pinned}">
+                                ${post.is_pinned ? 'SABİTLEMEYİ KALDIR' : 'KONUYU SABİTLE'}
                             </button>
-                            <button class="delete-post-btn" 
+                            <button class="admin-btn delete delete-post-btn" 
                                 data-id="${post.id}" 
-                                data-title="${safeTitle}" 
-                                style="background-color: darkred;">
+                                data-title="${safeTitle}">
                                 KONUYU SİL
                             </button>
                         </div>
@@ -153,5 +137,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
+    // 4. Başlat
     fetchAllPosts();
 });
