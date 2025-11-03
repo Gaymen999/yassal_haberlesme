@@ -1,11 +1,132 @@
 document.addEventListener('DOMContentLoaded', async () => { 
+    // --- 1. ELEMENTLERİ SEÇ ---
     const postsContainer = document.getElementById('posts-container');
     const newPostButtonContainer = document.getElementById('new-post-button-container');
 
+    // --- 2. DURUM DEĞİŞKENLERİ ---
     let isAdmin = false;
     let isLoggedIn = false; 
 
-    // --- 1. KULLANICI DURUMUNU KONTROL ET ---
+    // --- 3. FONKSİYON TANIMLAMALARI (HATANIN ÇÖZÜMÜ) ---
+    // BU FONKSİYONLAR, ÇAĞRILMADAN ÖNCE TANIMLANMALIDIR
+
+    // "Yeni Konu Aç" butonunu çizer
+    const renderNewPostButton = () => {
+        if (isLoggedIn) {
+            newPostButtonContainer.innerHTML = `<a href="submit.html" class="new-post-btn">Yeni Konu Aç</a>`;
+        } else {
+             newPostButtonContainer.innerHTML = `<p class="login-prompt">Konu açmak için lütfen <a href="login.html">giriş yapın</a>.</p>`;
+        }
+    };
+    
+    // Konuları çeker ve listeler
+    const fetchPosts = async () => {
+        try {
+            const res = await fetch('/api/posts/recent', { credentials: 'include' });
+            if (!res.ok) throw new Error('Konular yüklenemedi.');
+            
+            const posts = await res.json();
+            postsContainer.innerHTML = ''; // "Yükleniyor..." yazısını temizle
+
+            if (posts.length === 0) {
+                postsContainer.innerHTML = '<p>Gösterilecek konu bulunamadı.</p>';
+                return;
+            }
+
+            posts.forEach(post => {
+                const postElement = document.createElement('div');
+                postElement.className = 'post-card';
+                if (post.is_pinned) {
+                    postElement.classList.add('pinned');
+                }
+                
+                const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                });
+                
+                // Güvenli (XSS korumalı) HTML oluştur
+                const safeTitle = DOMPurify.sanitize(post.title);
+                const safeCategoryName = DOMPurify.sanitize(post.category_name);
+                const safeAuthorUsername = DOMPurify.sanitize(post.author_username);
+                const categorySlug = DOMPurify.sanitize(post.category_slug);
+
+                // Admin butonları (Sadece adminse ve konu kilitli değilse göster)
+                let adminControls = '';
+                if (isAdmin && !post.is_locked) {
+                    adminControls = `
+                        <div class="admin-card-controls">
+                            <button class="admin-pin-btn" 
+                                data-id="${post.id}" 
+                                data-is-pinned="${post.is_pinned}">
+                                ${post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle'}
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                postElement.innerHTML = `
+                    <div class="post-header">
+                        <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
+                        <a href="/category.html?slug=${categorySlug}" class="category-tag">${safeCategoryName}</a>
+                    </div>
+                    <div class="post-footer">
+                         <p class="post-meta">
+                            Yayınlayan: <a href="/profile.html?username=${encodeURIComponent(safeAuthorUsername)}">${safeAuthorUsername}</a> (${date})
+                         </p>
+                         <div class="post-stats">
+                            <span>${post.reply_count || 0} Cevap</span>
+                            <span>${post.like_count || 0} Beğeni</span>
+                        </div>
+                    </div>
+                    ${adminControls}
+                `;
+                postsContainer.appendChild(postElement);
+            });
+
+        } catch (error) {
+            console.error('Konu yükleme hatası:', error);
+            postsContainer.innerHTML = `<p style="color: red;">Konular yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
+        }
+    };
+    
+    // Admin sabitleme/kaldırma işlemleri
+    const handleAdminActions = async (e) => {
+        if (!e.target.classList.contains('admin-pin-btn')) return;
+        if (!isAdmin) return; 
+        
+        const btn = e.target;
+        const postId = btn.dataset.id;
+        const isCurrentlyPinned = btn.dataset.isPinned === 'true';
+        const actionText = isCurrentlyPinned ? 'sabitlemesini kaldırmak' : 'sabitlemek';
+
+        if (!confirm(`Bu konuyu ${actionText} istediğinize emin misiniz?`)) return;
+
+        try {
+            // DİKKAT: Ana sayfada sadece pin/unpin (sabitleme) işlemi yapıyoruz.
+            // Bu yüzden adminRoutes.js'deki PUT /admin/posts/:id rotasını kullanıyoruz.
+            const response = await fetch(`/admin/posts/${postId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                alert(`Konu başarıyla ${isCurrentlyPinned ? 'sabitlemesi kaldırıldı' : 'sabitlendi'}.`);
+                fetchPosts(); // Listeyi yenile
+            } else {
+                const data = await response.json();
+                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
+            }
+        } catch (error) {
+            console.error('Sabitleme hatası:', error);
+            alert('Sunucuya bağlanılamadı.');
+        }
+    };
+
+    // --- 4. KODU BAŞLAT ---
+    
+    // (Önce kullanıcı durumunu kontrol et)
     try {
         const response = await fetch('/api/user-status', {
             credentials: 'include' 
@@ -18,132 +139,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 isAdmin = true;
             }
         }
-        renderNewPostButton();
+        
+        // Artık fonksiyonlar tanımlı olduğu için burası çalışacak
+        renderNewPostButton(); 
+
     } catch (error) {
         console.warn('Kullanıcı durumu kontrol edilemedi.');
+        // Hata olsa bile buton (giriş yap) çizilmeli
         renderNewPostButton();
     }
 
-    // --- 2. FONKSİYON TANIMLAMALARI ---
-    
-    // (renderNewPostButton fonksiyonu aynı kaldı)
-    const renderNewPostButton = () => {
-        if (isLoggedIn) {
-            newPostButtonContainer.innerHTML = `<a href="submit.html" class="new-post-btn">Yeni Konu Aç</a>`;
-        } else {
-             newPostButtonContainer.innerHTML = `<p class="login-prompt">Konu açmak için lütfen <a href="login.html">giriş yapın</a>.</p>`;
-        }
-    };
-    
-    // Konuları Çek
-    const fetchPosts = async () => {
-        try {
-            const response = await fetch('/api/posts', { credentials: 'include' });
-            if (!response.ok) throw new Error('Konular yüklenirken bir hata oluştu: ' + response.statusText);
+    // (Sonra konuları çek)
+    await fetchPosts();
 
-            const data = await response.json(); 
-            const posts = data.posts;
-            
-            postsContainer.innerHTML = ''; 
-
-            if (posts.length === 0) {
-                postsContainer.innerHTML = '<p>Şu an yayınlanmış konu bulunmamaktadır.</p>';
-                return;
-            }
-
-            posts.forEach(post => {
-                const postElement = document.createElement('div');
-                postElement.classList.add('post-card'); 
-                if (post.is_pinned) postElement.classList.add('pinned');
-
-                const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
-                    year: 'numeric', month: 'long', day: 'numeric'
-                });
-                
-                // DEĞİŞTİ: Kategori linki oluşturuyoruz
-                const categoryName = post.category_name || 'Kategorisiz';
-                const categorySlug = post.category_slug; // Slug'ı al
-                const safeTitle = DOMPurify.sanitize(post.title);
-                const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
-                const safeCategoryName = DOMPurify.sanitize(categoryName);
-                
-                // Kategori linkini oluştur
-                const categoryLink = categorySlug 
-                    ? `<a href="category.html?slug=${categorySlug}" class="category-tag">${safeCategoryName}</a>`
-                    : `<span class="category-tag">${safeCategoryName}</span>`; // Slug yoksa link yapma
-
-                
-                // (Admin pin butonu kodu aynı kaldı)
-                let adminPinButton = '';
-                if (isAdmin) {
-                    const pinButtonText = post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Konuyu Sabitle';
-                    adminPinButton = `
-                        <button class="admin-pin-btn" data-id="${post.id}" data-is-pinned="${post.is_pinned}">
-                            ${pinButtonText}
-                        </button>
-                    `;
-                }
-
-                postElement.innerHTML = `
-                    <div class="post-header">
-                        <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
-                        
-                        ${categoryLink} 
-                        
-                        ${post.is_pinned ? '<span class="pinned-badge">⭐ SABİTLENMİŞ</span>' : ''}
-                    </div>
-                    
-                    <div class="post-footer">
-                         <p class="post-meta">Yayınlayan: ${safeAuthorUsername} (${date})</p>
-                         <div class="post-stats">
-                            <span>Cevap: ${post.reply_count || 0}</span>
-                            <span>Beğeni: ${post.like_count || 0}</span>
-                         </div>
-                    </div>
-                    
-                    <div class="admin-card-controls">
-                        ${adminPinButton}
-                    </div>
-                `;
-                postsContainer.appendChild(postElement);
-            });
-
-        } catch (error) {
-            console.error(error);
-            postsContainer.innerHTML = `<p style="color: red;">Konular yüklenirken hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
-        }
-    };
-    
-    // (handleAdminActions fonksiyonu aynı kaldı)
-    const handleAdminActions = async (e) => {
-        if (!e.target.classList.contains('admin-pin-btn')) return;
-        if (!isAdmin) return; 
-        const btn = e.target;
-        const postId = btn.dataset.id;
-        const isCurrentlyPinned = btn.dataset.isPinned === 'true';
-        const actionText = isCurrentlyPinned ? 'sabitlemesini kaldırmak' : 'sabitlemek';
-        if (!confirm(`Bu konuyu ${actionText} istediğinize emin misiniz?`)) return;
-        try {
-            const response = await fetch(`/admin/posts/${postId}/pin`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
-                credentials: 'include'
-            });
-            if (response.ok) {
-                alert(`Konu başarıyla ${isCurrentlyPinned ? 'sabitlendi' : 'sabitlemesi kaldırıldı'}.`);
-                fetchPosts(); 
-            } else {
-                const data = await response.json();
-                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
-        } catch (error) {
-            console.error('Sabitleme hatası:', error);
-            alert('Sunucuya bağlanılamadı.');
-        }
-    };
-
-    // --- 3. KODU ÇALIŞTIRMA ---
-    fetchPosts();
+    // (Event listener'ı en son ekle)
     postsContainer.addEventListener('click', handleAdminActions);
 });
