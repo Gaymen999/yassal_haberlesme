@@ -7,8 +7,7 @@ const POSTS_PER_PAGE = 20;
 const REPLIES_PER_PAGE = 20;
 
 // --- KATEGORİ ROTALARI ---
-
-// Technopat görünümü için istatistikleri çeken (EN GÜNCEL HALİ)
+// (Bunlar aynı kalıyor, ana sayfada kullanmasak da lazım olabilirler)
 router.get('/api/categories', async (req, res) => { 
     try {
         const categories = await pool.query(`
@@ -28,12 +27,9 @@ router.get('/api/categories', async (req, res) => {
         res.status(500).send('Sunucu Hatası');
     }
 });
-
-// Kategori detay sayfası (DÜZELTME: LEFT JOIN eklendi)
 router.get('/api/categories/:slug', async (req, res) => { 
     try {
         const { slug } = req.params;
-        // TODO: Burayı da sayfalamak gerekecek.
         const postsInCategory = await pool.query(`
             SELECT 
                 p.id, p.title, p.is_pinned, p.created_at, 
@@ -43,7 +39,6 @@ router.get('/api/categories/:slug', async (req, res) => {
                 u.avatar_url AS author_avatar
             FROM posts p
             JOIN users u ON p.author_id = u.id
-            -- DÜZELTME: Kategori NULL olabilir
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE c.slug = $1
             ORDER BY p.is_pinned DESC, p.created_at DESC;
@@ -61,7 +56,7 @@ router.get('/api/categories/:slug', async (req, res) => {
 
 // --- KONU (THREAD/POST) ROTALARI ---
 
-// Yeni Konu Açma (Kategori zorunluluğu kaldırılmış hali)
+// Yeni Konu Açma (Aynı kaldı)
 router.post('/posts', authenticateToken, async (req, res) => { 
     try {
         const { title, content, category_id } = req.body; 
@@ -91,14 +86,10 @@ router.post('/posts', authenticateToken, async (req, res) => {
     }
 });
 
-// Ana Sayfa Konu Listeleme (/api/posts) (DÜZELTME: LEFT JOIN eklendi)
+// DEĞİŞTİ: Ana Sayfa Konu Listeleme (/api/posts) - Sadece son 5
 router.get('/api/posts', async (req, res) => { 
     try {
-        const page = parseInt(req.query.page, 10) || 1;
-        const offset = (page - 1) * POSTS_PER_PAGE;
-
-        const totalPostsQuery = pool.query('SELECT COUNT(*) FROM posts WHERE is_pinned = false');
-        
+        // Sabitlenmiş konuları çek (bunlar her zaman en üstte)
         const pinnedPostsQuery = pool.query(`
             SELECT 
                 p.id, p.title, p.is_pinned, p.created_at, 
@@ -108,12 +99,12 @@ router.get('/api/posts', async (req, res) => {
                 (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count
             FROM posts p
             JOIN users u ON p.author_id = u.id
-            -- DÜZELTME: Kategori NULL olabilir
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.is_pinned = true
             ORDER BY p.created_at DESC;
         `);
 
+        // Son 5 normal konuyu çek
         const postsQuery = pool.query(`
             SELECT 
                 p.id, p.title, p.is_pinned, p.created_at, 
@@ -123,43 +114,34 @@ router.get('/api/posts', async (req, res) => {
                 (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count
             FROM posts p
             JOIN users u ON p.author_id = u.id
-            -- DÜZELTME: Kategori NULL olabilir
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.is_pinned = false
             ORDER BY p.created_at DESC
-            LIMIT $1 OFFSET $2;
-        `, [POSTS_PER_PAGE, offset]);
+            LIMIT 5;
+        `, []); // Sayfalama (offset) kaldırıldı
 
-        const [totalResult, pinnedResult, postsResult] = await Promise.all([
-            totalPostsQuery,
+        const [pinnedResult, postsResult] = await Promise.all([
             pinnedPostsQuery,
             postsQuery
         ]);
-
-        const totalPosts = parseInt(totalResult.rows[0].count, 10);
-        const totalPages = Math.ceil(totalPosts / POSTS_PER_PAGE);
         
         const allPosts = [
             ...pinnedResult.rows,
             ...postsResult.rows
         ];
         
+        // DEĞİŞTİ: Artık pagination objesi göndermiyoruz
         res.json({
-            posts: allPosts,
-            pagination: {
-                currentPage: page,
-                totalPages: totalPages,
-                totalPosts: totalPosts
-            }
+            posts: allPosts
         });
 
     } catch (err) {
         console.error("Konuları getirirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
-}); // <-- DÜZELTME: EKSİK OLAN PARANTEZ BURADAYDI
+});
 
-// Arşiv Listeleme (/api/archive-posts)
+// DEĞİŞTİ: Arşiv Listeleme (/api/archive-posts) - Son 5'ten sonrakiler
 router.get('/api/archive-posts', async (req, res) => { 
     try {
         const archivedPosts = await pool.query(`
@@ -170,9 +152,10 @@ router.get('/api/archive-posts', async (req, res) => {
                 u.username AS author_username
             FROM posts p
             JOIN users u ON p.author_id = u.id
-            -- DÜZELTME: Kategori NULL olabilir
             LEFT JOIN categories c ON p.category_id = c.id
-            ORDER BY p.created_at DESC;
+            WHERE p.is_pinned = false -- Arşive sabitlenmişleri dahil etme
+            ORDER BY p.created_at DESC
+            OFFSET 5; -- İlk 5 konuyu atla
         `);
         res.json(archivedPosts.rows);
     } catch (err) {
@@ -181,8 +164,9 @@ router.get('/api/archive-posts', async (req, res) => {
     }
 });
 
-// Tek bir konuyu getir (/api/threads/:id) (DÜZELTME: LEFT JOIN eklendi)
+// Tek bir konuyu getir (/api/threads/:id) (Aynı kaldı)
 router.get('/api/threads/:id', async (req, res) => {
+    // ... (Bu fonksiyonun içi aynı kalıyor, değişiklik yok) ...
     try {
         const { id } = req.params;
         const page = parseInt(req.query.page, 10) || 1;
@@ -203,7 +187,6 @@ router.get('/api/threads/:id', async (req, res) => {
 
             FROM posts p
             JOIN users u ON p.author_id = u.id
-            -- DÜZELTME: Kategori NULL olabilir
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.id = $1;
         `, [id]);
@@ -289,9 +272,9 @@ router.get('/api/threads/:id', async (req, res) => {
     }
 });
 
-
-// --- CEVAP (REPLY) ROTALARI ---
+// --- CEVAP (REPLY) ROTALARI --- (Aynı kaldı)
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
+    // ... (Bu fonksiyonun içi aynı kalıyor, değişiklik yok) ...
     try {
         const { id: threadId } = req.params; 
         const { content } = req.body;        
@@ -340,8 +323,9 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     }
 });
 
-// --- KULLANICI PROFİL ROTASI ---
+// --- KULLANICI PROFİL ROTASI --- (Aynı kaldı)
 router.get('/api/profile/:username', async (req, res) => {
+    // ... (Bu fonksiyonun içi aynı kalıyor, değişiklik yok) ...
     try {
         const { username } = req.params;
 
@@ -384,6 +368,5 @@ router.get('/api/profile/:username', async (req, res) => {
         res.status(500).send('Sunucu Hatası');
     }
 });
-
 
 module.exports = router;

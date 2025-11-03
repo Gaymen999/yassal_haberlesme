@@ -1,7 +1,7 @@
-// public/script.js (TAMAMEN YENİ İÇERİK)
+// public/script.js (YAZIM HATASI DÜZELTİLDİ)
 document.addEventListener('DOMContentLoaded', async () => { 
-    // DEĞİŞTİ: Artık 'categories-container'ı seçiyoruz
-    const categoriesContainer = document.getElementById('categories-container');
+    // DEĞİŞTİ: Artık 'posts-container'ı seçiyoruz
+    const postsContainer = document.getElementById('posts-container');
     const newPostButtonContainer = document.getElementById('new-post-button-container');
 
     let isAdmin = false;
@@ -18,55 +18,67 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
     
-    // DEĞİŞTİ: Artık 'fetchCategories' (Kategorileri Çek)
-    const fetchCategories = async () => {
+    // DEĞİŞTİ: 'fetchPosts' (Konuları Çek)
+    const fetchPosts = async () => {
         try {
-            // DEĞİŞTİ: API rotası
-            const response = await fetch('/api/categories', { credentials: 'include' });
-            if (!response.ok) throw new Error('Kategoriler yüklenirken bir hata oluştu: ' + response.statusText);
+            // DEĞİŞTİ: API rotası (artık ?page= yok)
+            const response = await fetch('/api/posts', { credentials: 'include' });
+            
+            // DÜZELTME: Yazım hatası düzeltildi ('D + yerine ' +)
+            if (!response.ok) throw new Error('Konular yüklenirken bir hata oluştu: ' + response.statusText);
 
-            const categories = await response.json(); 
-            categoriesContainer.innerHTML = ''; 
+            // DEĞİŞTİ: API artık { posts: [...] } döndürüyor
+            const data = await response.json(); 
+            const posts = data.posts;
+            
+            postsContainer.innerHTML = ''; 
 
-            if (categories.length === 0) {
-                categoriesContainer.innerHTML = '<p>Gösterilecek kategori bulunmamaktadır.</p>';
+            if (posts.length === 0) {
+                postsContainer.innerHTML = '<p>Şu an yayınlanmış konu bulunmamaktadır.</p>';
                 return;
             }
 
-            categories.forEach(category => {
-                const categoryElement = document.createElement('div');
-                // YENİ: Resimdeki gibi CSS class'ları ekliyoruz
-                categoryElement.classList.add('category-card'); 
+            posts.forEach(post => {
+                const postElement = document.createElement('div');
+                postElement.classList.add('post-card'); 
+                if (post.is_pinned) postElement.classList.add('pinned');
 
-                // Güvenlik
-                const safeName = DOMPurify.sanitize(category.name);
-                const safeDescription = DOMPurify.sanitize(category.description || '');
-                // API'den gelen yeni istatistikler
-                const postCount = category.post_count || 0;
-                // Mesaj sayısı = Konu sayısı + Cevap sayısı
-                const messageCount = (parseInt(postCount) + parseInt(category.reply_count || 0));
+                const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                });
+                
+                // Kategori adı NULL ise "Kategorisiz" yaz
+                const categoryName = post.category_name || 'Kategorisiz';
 
-                // YENİ: Kategori kartı HTML'i
-                categoryElement.innerHTML = `
-                    <div class="category-header">
-                        <h3><a href="/category.html?slug=${category.slug}">${safeName}</a></h3>
+                const safeTitle = DOMPurify.sanitize(post.title);
+                const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
+                const safeCategoryName = DOMPurify.sanitize(categoryName);
+
+                // YENİ: Konu kartı HTML'i (Eskisi gibi)
+                postElement.innerHTML = `
+                    <div class="post-header">
+                        <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
+                        <span class="category-tag">${safeCategoryName}</span>
+                        ${post.is_pinned ? '<span class="pinned-badge">⭐ SABİTLENMİŞ</span>' : ''}
                     </div>
-                    <div class="category-body">
-                        <div class="category-info">
-                            <p>${safeDescription}</p>
-                        </div>
-                        <div class="category-stats">
-                            <span>Konular: <strong>${postCount}</strong></span>
-                            <span>Mesajlar: <strong>${messageCount}</strong></span>
-                        </div>
+                    
+                    <div class="post-footer">
+                         <p class="post-meta">Yayınlayan: ${safeAuthorUsername} (${date})</p>
+                         <div class="post-stats">
+                            <span>Cevap: ${post.reply_count || 0}</span>
+                            <span>Beğeni: ${post.like_count || 0}</span>
+                         </div>
                     </div>
                 `;
-                categoriesContainer.appendChild(categoryElement);
+                postsContainer.appendChild(postElement);
             });
+            
+            // Not: Admin pinleme butonu ana sayfadan kaldırıldı (şimdilik)
+            // İstersen geri ekleyebiliriz.
 
         } catch (error) {
             console.error(error);
-            categoriesContainer.innerHTML = `<p style="color: red;">Kategoriler yüklenirken hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
+            postsContainer.innerHTML = `<p style="color: red;">Konular yüklenirken hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
         }
     };
     
@@ -91,6 +103,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderNewPostButton();
     }
 
-    // Kategorileri çek
-    fetchCategories();
+    // Konuları çek
+    fetchPosts();
 });

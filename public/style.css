@@ -482,3 +482,109 @@
 
 /* Sayfalama stilleri artık ana sayfada kullanılmıyor,
    ama thread.html için silme. */
+
+   /* === ANA SAYFA KONU KARTLARI (GERİ GELDİ) === */
+
+.posts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-width: 900px; /* main ile aynı hizada */
+    margin: 0 auto 20px auto;
+}
+
+.post-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.2s ease-in-out;
+}
+
+.post-card:hover {
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.post-card.pinned {
+    background-color: #fffbef; /* Sabitlenmiş konu rengi */
+    border-color: #f0e0a0;
+}
+
+.post-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.post-header h3 {
+    margin: 0;
+    font-size: 1.2em;
+}
+
+.post-header h3 a {
+    color: #005A9C;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.post-header h3 a:hover {
+    text-decoration: underline;
+}
+
+.category-tag {
+    background-color: #f0f0f0;
+    color: #555;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.pinned-badge {
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #b08a00;
+}
+
+.post-card .post-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f0;
+    font-size: 0.9em;
+    color: #666;
+}
+
+.post-card .post-meta {
+    margin: 0;
+}
+
+.post-stats {
+    display: flex;
+    gap: 15px;
+    color: #555;
+}
+
+/* === ARŞİV LİNKİ === */
+.archive-link-container {
+    max-width: 900px;
+    margin: 10px auto;
+    text-align: right;
+}
+
+.archive-link {
+    color: #005A9C;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.archive-link:hover {
+    text-decoration: underline;
+}
