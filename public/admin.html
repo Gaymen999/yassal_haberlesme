@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Paneli</title>
     <link rel="stylesheet" href="style.css">
+    
+    <style>
+        .pending-controls .admin-btn {
+            background-color: #28a745; /* Yeşil */
+            margin-right: 5px;
+        }
+        .pending-controls .admin-btn.reject {
+            background-color: #dc3545; /* Kırmızı */
+        }
+        .pending-post-card {
+            border: 2px solid #ffc107; /* Sarı */
+            background: #fffbeb;
+        }
+        #pending-posts-container h3 {
+            border-bottom: 2px solid #ffc107;
+            padding-bottom: 5px;
+        }
+        #posts-management-container h3 {
+             border-bottom: 2px solid #ccc;
+             padding-bottom: 5px;
+        }
+    </style>
 </head>
 <body data-auth="admin"> 
     <header>
@@ -16,24 +38,28 @@
     </header>
 
     <main>
-        <h2>Konu Yönetimi</h2>
         
-        <p id="loading-message">Tüm konular yükleniyor...</p>
-        <div id="posts-management-container" class="posts-container">
+        <div id="pending-posts-container" class="posts-container" style="margin-bottom: 40px;">
+            <h3>Onay Bekleyen Konular</h3>
+            <p id="pending-loading-message">Onay bekleyen konular yükleniyor...</p>
             </div>
-        </main>
+
+
+        <div id="posts-management-container" class="posts-container">
+            <h3>Onaylanmış Konuları Yönet (Sabitle / Sil)</h3>
+            <p id="approved-loading-message">Onaylanmış konular yükleniyor...</p>
+            </div>
+
+    </main>
     
     <footer>
         <div style="max-width: 900px; margin: 0 auto; padding: 20px 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.9em; color: #666;">
-            
             <p style="margin: 0;">&copy; 2025 Yassal Haberleşme</p>
-            
             <p style="margin: 0;">
                 <a href="mailto:yassalhaberlesme@gmail.com" style="color: inherit; text-decoration: none;">
                     yassalhaberlesme@gmail.com
                 </a>
             </p>
-
         </div>
     </footer>
 

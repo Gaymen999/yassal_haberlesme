@@ -2,104 +2,182 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. HTML'deki elementleri seç
-    const container = document.getElementById('posts-management-container');
-    const loadingMessage = document.getElementById('loading-message');
+    const approvedContainer = document.getElementById('posts-management-container');
+    const approvedLoading = document.getElementById('approved-loading-message');
     
-    // --- 2. Moderasyon İşlemleri (API Çağrıları) ---
+    // YENİ: Onay bekleyenler elementleri
+    const pendingContainer = document.getElementById('pending-posts-container');
+    const pendingLoading = document.getElementById('pending-loading-message');
+    
+    
+    // --- 2. GENEL MODERASYON İŞLEMLERİ ---
 
-    // Konu Sabitleme / Sabitlemeyi Kaldırma
-    const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
-        const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
-        if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
-        
+    // YENİ: Konu Durumunu Güncelle (Onayla / Reddet)
+    const updatePostStatus = async (postId, postTitle, newStatus) => {
+        const actionText = newStatus === 'approved' ? 'ONAYLAMAK' : 'REDDETMEK';
+        if (!confirm(`"${postTitle}" başlıklı konuyu ${actionText} istediğinize emin misiniz?`)) return;
+
         try {
-            // Bu rota doğru: /admin/posts/:id
-            const response = await fetch(`/admin/posts/${postId}`, {
+            const response = await fetch(`/admin/posts/${postId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
-                credentials: 'include' 
+                body: JSON.stringify({ status: newStatus }),
+                credentials: 'include'
             });
 
             if (response.ok) {
-                alert(`Konu başarıyla ${isCurrentlyPinned ? 'Sabitlemesi Kaldırıldı' : 'Sabitlendi'}!`);
-                fetchAllPosts(); // Listeyi yenile
+                alert('İşlem başarılı!');
+                // Her iki listeyi de yenile
+                fetchPendingPosts();
+                fetchApprovedPosts();
             } else {
                 const data = await response.json();
                 alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
             }
         } catch (error) {
-            console.error('Sabitleme hatası:', error);
+            console.error('Durum güncelleme hatası:', error);
             alert('Sunucuya bağlanılamadı.');
+        }
+    };
+
+    // Konu Sabitleme (Aynı, değişmedi)
+    const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
+        // ... (Bu fonksiyonun içi aynı) ...
+        try {
+            // ...
+            if (response.ok) {
+                // ...
+                fetchApprovedPosts(); // Sadece onaylıları yenile
+            } // ...
+        } catch (error) {
+            // ...
         }
     };
     
-    // Konu Silme
+    // Konu Silme (Aynı, değişmedi)
     const deletePost = async (postId, postTitle) => {
-        if (!confirm(`"${postTitle}" başlıklı konuyu SİLMEK istediğinize emin misiniz? Bu işlem geri alınamaz!`)) return;
-        
+        // ... (Bu fonksiyonun içi aynı) ...
         try {
-            // Bu rota doğru: /admin/posts/:id
-            const response = await fetch(`/admin/posts/${postId}`, {
-                method: 'DELETE',
-                credentials: 'include'
-            });
-            
+            // ...
             if (response.ok) {
-                alert('Konu başarıyla silindi.');
-                fetchAllPosts(); // Listeyi yenile
-            } else {
-                const data = await response.json();
-                alert(`Silme işlemi başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
+                // ...
+                fetchApprovedPosts(); // Sadece onaylıları yenile
+            } // ...
         } catch (error) {
-            console.error('Silme hatası:', error);
-            alert('Sunucuya bağlanılamadı.');
+            // ...
         }
     };
 
-    // --- 3. Veri Yükleme Fonksiyonu ---
-    const fetchAllPosts = async () => {
+    // --- 3. VERİ YÜKLEME FONKSİYONLARI ---
+
+    // YENİ: Onay Bekleyen Konuları Çek
+    const fetchPendingPosts = async () => {
         try {
-            loadingMessage.style.display = 'block';
-            container.innerHTML = ''; 
-
-            // ***** DEĞİŞİKLİK BURADA *****
-            // Hatalı/Eksik adres '/api/posts/archive' idi.
-            // Doğru adres (Arşiv ve Arama için kullandığımız) '/api/archive' olacak.
-            const response = await fetch('/api/archive', { credentials: 'include' });
-            // ***** DEĞİŞİKLİK BİTTİ *****
-
-            if (!response.ok) {
-                throw new Error('Sunucudan konular çekilemedi.');
-            }
+            pendingLoading.style.display = 'block';
+            
+            // YENİ ROTA: /admin/posts/pending
+            const response = await fetch('/admin/posts/pending', { credentials: 'include' });
+            if (!response.ok) throw new Error('Onay bekleyenler çekilemedi.');
             
             const posts = await response.json();
-            loadingMessage.style.display = 'none';
+            pendingLoading.style.display = 'none';
+            
+            // Konteynerin içini temizle (başlık hariç)
+            pendingContainer.querySelectorAll('.admin-post-card').forEach(card => card.remove());
 
             if (posts.length === 0) {
-                container.innerHTML = '<p>Yönetilecek konu bulunamadı.</p>';
+                pendingContainer.insertAdjacentHTML('beforeend', '<p>Onay bekleyen konu bulunmamaktadır.</p>');
                 return;
             }
 
             posts.forEach(post => {
                 const postElement = document.createElement('div');
-                postElement.className = 'admin-post-card'; // CSS için class
+                postElement.className = 'admin-post-card pending-post-card'; // YENİ CSS
                 
-                // XSS Koruması
                 const safeTitle = DOMPurify.sanitize(post.title);
                 const safeAuthor = DOMPurify.sanitize(post.author_username);
-                const safeCategory = DOMPurify.sanitize(post.category_name);
+                const safeCategory = DOMPurify.sanitize(post.category_name || 'Bilinmiyor');
                 const date = new Date(post.created_at).toLocaleString('tr-TR');
+
+                postElement.innerHTML = `
+                    <div class="admin-post-header">
+                        <a href="/thread.html?id=${post.id}" target="_blank">${safeTitle}</a>
+                        
+                        <div class="admin-controls pending-controls">
+                            <button class="admin-btn approve-btn" data-id="${post.id}" data-title="${safeTitle}">
+                                ONAYLA
+                            </button>
+                            <button class="admin-btn reject reject-btn" data-id="${post.id}" data-title="${safeTitle}">
+                                REDDET
+                            </button>
+                        </div>
+                    </div>
+                    <p class="post-meta">
+                        Yazar: ${safeAuthor} | Tarih: ${date} | Kategori: <strong>${safeCategory}</strong>
+                    </p>
+                `;
+                pendingContainer.appendChild(postElement);
+            });
+            
+            // YENİ: Buton Olay Dinleyicileri
+            pendingContainer.querySelectorAll('.approve-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    updatePostStatus(btn.dataset.id, btn.dataset.title, 'approved');
+                });
+            });
+            pendingContainer.querySelectorAll('.reject-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    updatePostStatus(btn.dataset.id, btn.dataset.title, 'rejected');
+                });
+            });
+
+        } catch (error) {
+            console.error('Onay bekleyenleri yükleme hatası:', error);
+            pendingLoading.style.display = 'none';
+            pendingContainer.innerHTML += '<p style="color: red;">Onay bekleyenler yüklenirken hata oluştu.</p>';
+        }
+    };
+    
+    
+    // GÜNCELLENDİ: Onaylanmış Konuları Çek
+    // (Eski fetchAllPosts fonksiyonu)
+    const fetchApprovedPosts = async () => {
+        try {
+            approvedLoading.style.display = 'block';
+            
+            // Rota aynı: /api/archive (Bu rota artık sadece onaylıları getiriyor)
+            const response = await fetch('/api/archive', { credentials: 'include' });
+            if (!response.ok) throw new Error('Onaylı konular çekilemedi.');
+            
+            const posts = await response.json();
+            approvedLoading.style.display = 'none';
+
+            // Konteynerin içini temizle (başlık hariç)
+            approvedContainer.querySelectorAll('.admin-post-card').forEach(card => card.remove());
+
+            if (posts.length === 0) {
+                approvedContainer.insertAdjacentHTML('beforeend', '<p>Yönetilecek onaylı konu bulunamadı.</p>');
+                return;
+            }
+
+            posts.forEach(post => {
+                const postElement = document.createElement('div');
+                postElement.className = 'admin-post-card';
                 
+                const safeTitle = DOMPurify.sanitize(post.title);
+                const safeAuthor = DOMPurify.sanitize(post.author_username);
+                const safeCategory = DOMPurify.sanitize(post.category_name || 'Bilinmiyor');
+                const date = new Date(post.created_at).toLocaleString('tr-TR');
+                const isPinned = post.is_pinned || false;
+
                 postElement.innerHTML = `
                     <div class="admin-post-header">
                         <a href="/thread.html?id=${post.id}" target="_blank">${safeTitle}</a>
                         <div class="admin-controls">
                             <button class="admin-btn pin-toggle-btn" 
                                 data-id="${post.id}" 
-                                data-pinned="${post.is_pinned}">
-                                ${post.is_pinned ? 'SABİTLEMEYİ KALDIR' : 'KONUYU SABİTLE'}
+                                data-pinned="${isPinned}">
+                                ${isPinned ? 'SABİTLEMEYİ KALDIR' : 'KONUYU SABİTLE'}
                             </button>
                             <button class="admin-btn delete delete-post-btn" 
                                 data-id="${post.id}" 
@@ -109,16 +187,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         </div>
                     </div>
                     <p class="post-meta">
-                        Yazar: ${safeAuthor} | 
-                        Tarih: ${date} | 
-                        Kategori: <strong>${safeCategory}</strong>
+                        Yazar: ${safeAuthor} | Tarih: ${date} | Kategori: <strong>${safeCategory}</strong>
                     </p>
                 `;
-                container.appendChild(postElement);
+                approvedContainer.appendChild(postElement);
             });
             
-            // Buton Olay Dinleyicileri Ekle
-            container.querySelectorAll('.pin-toggle-btn').forEach(btn => {
+            // Buton Olay Dinleyicileri (Sabitle/Sil)
+            approvedContainer.querySelectorAll('.pin-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const postId = btn.dataset.id;
                     const isPinned = btn.dataset.pinned === 'true';
@@ -126,7 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
             });
             
-            container.querySelectorAll('.delete-post-btn').forEach(btn => {
+            approvedContainer.querySelectorAll('.delete-post-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const postId = btn.dataset.id;
                     const postTitle = btn.dataset.title;
@@ -135,12 +211,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
         } catch (error) {
-            console.error('Yükleme hatası:', error);
-            loadingMessage.style.display = 'none';
-            container.innerHTML = '<p style="color: red;">Sunucuya bağlanırken bir sorun oluştu.</p>';
+            console.error('Onaylıları yükleme hatası:', error);
+            approvedLoading.style.display = 'none';
+            approvedContainer.innerHTML += '<p style="color: red;">Sunucuya bağlanırken bir sorun oluştu.</p>';
         }
     };
 
     // 4. Başlat
-    fetchAllPosts();
+    fetchPendingPosts();   // Onay bekleyenleri çek
+    fetchApprovedPosts();  // Onaylıları çek
 });

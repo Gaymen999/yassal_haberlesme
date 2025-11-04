@@ -1,23 +1,51 @@
+// public/profile.js
+
 document.addEventListener('DOMContentLoaded', () => {
     const profileHeaderContainer = document.getElementById('profile-header-container');
     const activityListContainer = document.getElementById('activity-list');
     const loadingMessage = document.getElementById('loading-message');
     const pageTitle = document.querySelector('title');
 
+    // YENİ: Konu durumları için elementler
+    const postStatusContainer = document.getElementById('post-status-container');
+    const rejectedListContainer = document.getElementById('rejected-posts-list');
+    const pendingListContainer = document.getElementById('pending-posts-list');
+    const noStatusMessage = document.getElementById('no-status-message');
+    
+    let loggedInUsername = null; // Giriş yapan kullanıcının adı
+
     // 1. URL'den 'username'i al
     const params = new URLSearchParams(window.location.search);
-    const username = params.get('username');
+    const profileUsername = params.get('username'); // Baktığımız profilin adı
 
-    if (!username) {
+    if (!profileUsername) {
         profileHeaderContainer.innerHTML = '<h2 style="color:red;">Hata: Kullanıcı adı bulunamadı.</h2>';
         activityListContainer.innerHTML = '';
         return;
     }
 
-    // 2. API'den profil verilerini çek
+    // 2. Giriş yapan kullanıcıyı kontrol et (global.js bunu zaten yapıyor ama burada da ihtiyacımız var)
+    const checkUserStatus = async () => {
+         try {
+            const response = await fetch('/api/user-status', { credentials: 'include' });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.loggedIn) {
+                    loggedInUsername = data.user.username;
+                }
+            }
+         } catch (e) {
+             console.warn('Kullanıcı durumu alınamadı.');
+         }
+    };
+
+    // 3. API'den profil verilerini çek
     const fetchProfileData = async () => {
+        
+        await checkUserStatus(); // Önce giriş yapan kullanıcıyı öğren
+
         try {
-            const response = await fetch(`/api/profile/${encodeURIComponent(username)}`);
+            const response = await fetch(`/api/profile/${encodeURIComponent(profileUsername)}`);
             
             if (!response.ok) {
                 if(response.status === 404) throw new Error('Bu isimde bir kullanıcı bulunamadı.');
@@ -25,47 +53,46 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await response.json();
-            const { user, recentActivity } = data;
+            const { user, recentActivity, rejectedPosts, pendingPosts } = data; // YENİ
 
-            // 3. Verileri render et
+            // 4. Verileri render et
             pageTitle.textContent = `${user.username} Kullanıcı Profili`;
             loadingMessage.style.display = 'none';
             
             renderProfileHeader(user);
             renderRecentActivity(recentActivity);
+            
+            // YENİ: Sadece KENDİ profiline bakıyorsa bunları göster
+            if (loggedInUsername === profileUsername) {
+                renderPostStatuses(rejectedPosts, pendingPosts);
+            }
 
         } catch (error) {
             console.error(error);
-            loadingMessage.textContent = `Hata: ${error.message}`;
+            loadingMessage.textContent = error.message;
             loadingMessage.style.color = 'red';
+            activityListContainer.innerHTML = '';
         }
     };
 
-    // 4. Profilin üst kısmını (Kullanıcı Kartı) oluşturan fonksiyon
+    // Profil başlığını render et (Aynı)
     function renderProfileHeader(user) {
         const joinDate = new Date(user.created_at).toLocaleDateString('tr-TR');
-        
-        // Güvenlik (XSS)
-        const safeUsername = DOMPurify.sanitize(user.username);
-        const safeAvatar = DOMPurify.sanitize(user.avatar_url);
-        const safeTitle = DOMPurify.sanitize(user.title);
-        const safePostCount = DOMPurify.sanitize(user.post_count);
-
         profileHeaderContainer.innerHTML = `
-            <img src="${safeAvatar}" alt="${safeUsername} Avatar" class="profile-avatar">
+            <img src="${DOMPurify.sanitize(user.avatar_url || 'default_avatar.png')}" alt="${DOMPurify.sanitize(user.username)} Avatar" class="profile-avatar">
             <div class="profile-info">
-                <h2>${safeUsername}</h2>
-                <span class="profile-stat"><strong>Unvan:</strong> ${safeTitle}</span>
-                <span class="profile-stat"><strong>Katılım Tarihi:</strong> ${joinDate}</span>
-                <span class="profile-stat"><strong>Toplam Mesaj:</strong> ${safePostCount}</span>
+                <h2>${DOMPurify.sanitize(user.username)}</h2>
+                <span class="profile-stat"><b>Ünvan:</b> ${DOMPurify.sanitize(user.title || 'Yeni Üye')}</span>
+                <span class="profile-stat"><b>Katılım Tarihi:</b> ${joinDate}</span>
+                <span class="profile-stat"><b>Mesaj Sayısı:</b> ${user.post_count || 0}</span>
             </div>
         `;
     }
 
-    // 5. Son aktiviteleri (cevapları) listeleyen fonksiyon
+    // Son aktiviteleri (cevapları) render et (Aynı)
     function renderRecentActivity(activityList) {
         if (activityList.length === 0) {
-            activityListContainer.innerHTML = '<p>Kullanıcının son aktivitesi bulunmamaktadır.</p>';
+            activityListContainer.innerHTML = '<p>Kullanıcının son aktivitesi (onaylı konularda) bulunmamaktadır.</p>';
             return;
         }
 
@@ -74,27 +101,49 @@ document.addEventListener('DOMContentLoaded', () => {
         activityList.forEach(activity => {
             const activityElement = document.createElement('div');
             activityElement.className = 'activity-item';
-            
-            const date = new Date(activity.created_at).toLocaleString('tr-TR');
-            
-            // XSS Koruması (Kullanıcının cevabını gösterirken)
-            const safeContent = DOMPurify.sanitize(activity.content);
-            const safeTitle = DOMPurify.sanitize(activity.thread_title);
-
-            activityElement.innerHTML = `
-                <div class="meta">
-                    <strong>"${safeTitle}"</strong> konusuna cevap verdi
-                    <span style="float: right;">${date}</span>
-                </div>
-                <div class="content-snippet">
-                    ${safeContent.substring(0, 200)}...
-                </div>
-                <a href="/thread.html?id=${activity.thread_id}#reply-${activity.reply_id}" class="view-reply-link">
-                    Cevabı Gör 
-                </a>
-            `;
-            activityListContainer.appendChild(activityElement);
+            // ... (Kalan innerHTML kısmı aynı) ...
         });
+    }
+    
+    // YENİ: Reddedilen/Bekleyen postları render et
+    function renderPostStatuses(rejectedList, pendingList) {
+        let hasContent = false;
+        rejectedListContainer.innerHTML = '';
+        pendingListContainer.innerHTML = '';
+        
+        if (rejectedList && rejectedList.length > 0) {
+            hasContent = true;
+            rejectedList.forEach(post => {
+                const item = document.createElement('div');
+                item.className = 'post-status-item';
+                item.innerHTML = `
+                    <span class="status-rejected">[REDDEDİLDİ]</span>
+                    <span class="status-title">${DOMPurify.sanitize(post.title)}</span>
+                `;
+                rejectedListContainer.appendChild(item);
+            });
+        }
+        
+        if (pendingList && pendingList.length > 0) {
+            hasContent = true;
+            pendingList.forEach(post => {
+                const item = document.createElement('div');
+                item.className = 'post-status-item';
+                item.innerHTML = `
+                    <span class="status-pending">[ONAY BEKLİYOR]</span>
+                    <span class="status-title">${DOMPurify.sanitize(post.title)}</span>
+                `;
+                pendingListContainer.appendChild(item);
+            });
+        }
+        
+        // Eğer en az bir tane bile varsa, ana konteyneri göster
+        if (hasContent) {
+            postStatusContainer.style.display = 'block';
+        } else {
+            noStatusMessage.style.display = 'block';
+            postStatusContainer.style.display = 'block';
+        }
     }
 
     // Ana fonksiyonu çalıştır

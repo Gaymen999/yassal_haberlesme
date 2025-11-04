@@ -33,6 +33,7 @@ const createTables = async () => {
     );
   `;
 
+  // --- DEĞİŞTİ: posts tablosuna 'status' sütunu eklendi ---
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -43,9 +44,16 @@ const createTables = async () => {
       is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
       is_locked BOOLEAN DEFAULT FALSE NOT NULL,
       best_reply_id INTEGER NULL, 
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      
+      -- YENİ SÜTUN --
+      -- 'pending': Onay bekliyor (varsayılan)
+      -- 'approved': Onaylandı
+      -- 'rejected': Reddedildi
+      status VARCHAR(20) DEFAULT 'pending' NOT NULL 
     );
   `;
+  // --- DEĞİŞİKLİK BİTTİ ---
 
   const repliesTableQuery = `
     CREATE TABLE IF NOT EXISTS replies (
@@ -53,7 +61,7 @@ const createTables = async () => {
       content TEXT NOT NULL,
       thread_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_at TIMESTAMTOASTZ DEFAULT NOW()
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `;
   const threadReactionsTableQuery = `
@@ -85,10 +93,7 @@ const createTables = async () => {
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
 
-    // --- DEĞİŞTİ: Kategori Ekleme Bloğu ---
-    // 'if (categoriesCheck.rows.length === 0)' bloğu yerine
-    // 'ON CONFLICT (slug) DO NOTHING' kullanıyoruz.
-    // Bu sayede sunucu her başladığında eksik kategoriler eklenir.
+    // Kategori ekleme (ON CONFLICT ile güvenli)
     console.log('Varsayılan kategoriler kontrol ediliyor/ekleniyor...');
     const insertCategoriesQuery = `
         INSERT INTO categories (name, description, slug) VALUES
@@ -102,7 +107,6 @@ const createTables = async () => {
     `;
     await pool.query(insertCategoriesQuery);
     console.log('Kategori kontrolü tamamlandı.');
-    // --- DEĞİŞİKLİK BİTTİ ---
 
   } catch (err) {
     console.error("Tablolar oluşturulurken hata:", err);

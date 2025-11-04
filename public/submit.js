@@ -1,12 +1,12 @@
+// public/submit.js
+
 document.addEventListener('DOMContentLoaded', () => {
     const submitForm = document.getElementById('submit-form');
     const titleInput = document.getElementById('title');
     const messageElement = document.getElementById('message');
-    
-    // DEĞİŞTİ: Kategori seçici geri geldi
     const categorySelect = document.getElementById('category-select');
 
-    // ... (Quill ayarları aynı) ...
+    // Quill editör ayarları (Aynı)
     const toolbarOptions = [
         ['bold', 'italic', 'underline', 'strike'],
         ['blockquote', 'code-block'],
@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // DEĞİŞTİ: Kategorileri çeken fonksiyon geri geldi
+    // Kategorileri çeken fonksiyon (Aynı)
     const fetchCategories = async () => {
         try {
             const response = await fetch('/api/categories');
@@ -39,27 +39,28 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (error) {
             console.error(error);
-            messageElement.textContent = 'Kategoriler yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.';
+            messageElement.textContent = 'Kategoriler yüklenemedi, lütfen sayfayı yenileyin.';
         }
     };
 
+    // --- DEĞİŞTİ: Form gönderme fonksiyonu ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         messageElement.textContent = '';
         messageElement.style.color = 'red';
 
         const title = titleInput.value;
-        const content = quill.root.innerHTML; 
-        
-        // DEĞİŞTİ: Kategori ID geri geldi
+        const content = quill.root.innerHTML;
         const category_id = categorySelect.value;
-
-        if (!title.trim() || !content.trim() || content === '<p><br></p>') {
-            messageElement.textContent = 'Başlık ve içerik alanları boş bırakılamaz.';
+        
+        if (!title || title.trim().length < 5) {
+            messageElement.textContent = 'Başlık en az 5 karakter olmalıdır.';
             return;
         }
-
-        // DEĞİŞTİ: Kategori ID kontrolü geri geldi
+        if (quill.getLength() < 10) {
+            messageElement.textContent = 'İçerik çok kısa.';
+            return;
+        }
         if (!category_id) {
             messageElement.textContent = 'Lütfen bir kategori seçin.';
             return;
@@ -74,7 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ 
                     title: title, 
                     content: cleanContent,
-                    // DEĞİŞTİ: category_id gönderiliyor
                     category_id: category_id
                 }),
                 credentials: 'include'
@@ -83,11 +83,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (response.ok) {
-                messageElement.textContent = 'Konunuz başarıyla yayınlandı! Yönlendiriliyorsunuz...';
+                // YENİ: Mesaj ve yönlendirme backend'den gelen 'status'e göre değişiyor
                 messageElement.style.color = 'green';
-                setTimeout(() => {
-                    window.location.href = `/thread.html?id=${data.post.id}`;
-                }, 2000);
+                
+                if (data.status === 'approved') {
+                    // Admin post attıysa
+                    messageElement.textContent = 'Konunuz başarıyla yayınlandı! Yönlendiriliyorsunuz...';
+                    setTimeout(() => {
+                        window.location.href = `/thread.html?id=${data.post.id}`;
+                    }, 2000);
+                } else {
+                    // Normal kullanıcı post attıysa
+                    messageElement.textContent = 'Konunuz onaya gönderildi! Admin incelemesinden sonra yayınlanacaktır. Ana sayfaya yönlendiriliyorsunuz...';
+                    setTimeout(() => {
+                        window.location.href = '/index.html'; // Ana sayfaya yönlendir
+                    }, 3000);
+                }
             } else {
                 throw new Error(data.message || 'Bir hata oluştu.');
             }
@@ -99,6 +110,5 @@ document.addEventListener('DOMContentLoaded', () => {
     
     submitForm.addEventListener('submit', handleSubmit);
     
-    // DEĞİŞTİ: Kategorileri çek
     fetchCategories();
 });
