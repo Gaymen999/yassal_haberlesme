@@ -10,6 +10,7 @@ const pool = new Pool({
 });
 
 const createTables = async () => {
+  // --- Tablo Sorguları (Değişmedi) ---
   const usersTableQuery = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -33,7 +34,7 @@ const createTables = async () => {
     );
   `;
 
-  // --- DEĞİŞTİ: posts tablosuna 'status' sütunu eklendi ---
+  // Bu sorgu, 'status' sütununu YENİ tablolar için tanımlar
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -45,15 +46,9 @@ const createTables = async () => {
       is_locked BOOLEAN DEFAULT FALSE NOT NULL,
       best_reply_id INTEGER NULL, 
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      
-      -- YENİ SÜTUN --
-      -- 'pending': Onay bekliyor (varsayılan)
-      -- 'approved': Onaylandı
-      -- 'rejected': Reddedildi
       status VARCHAR(20) DEFAULT 'pending' NOT NULL 
     );
   `;
-  // --- DEĞİŞİKLİK BİTTİ ---
 
   const repliesTableQuery = `
     CREATE TABLE IF NOT EXISTS replies (
@@ -84,6 +79,7 @@ const createTables = async () => {
   `;
 
   try {
+    // 1. Standart tabloları oluştur/kontrol et
     await pool.query(usersTableQuery);
     await pool.query(categoriesTableQuery); 
     await pool.query(postsTableQuery); 
@@ -93,7 +89,24 @@ const createTables = async () => {
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
 
-    // Kategori ekleme (ON CONFLICT ile güvenli)
+    // --- ÖNEMLİ: 'posts' TABLOSUNU GÜNCELLEME BLOĞU ---
+    // Bu kod, 'status' sütunu yoksa ekler, varsa hata vermeden geçer.
+    console.log("'posts' tablosu 'status' sütunu için kontrol ediliyor...");
+    try {
+        await pool.query("ALTER TABLE posts ADD COLUMN status VARCHAR(20) DEFAULT 'pending' NOT NULL");
+        console.log("BİLGİ: 'status' sütunu 'posts' tablosuna başarıyla eklendi.");
+    } catch (err) {
+        if (err.code === '42701') { // 42701 = column already exists (sütun zaten var)
+            console.log("BİLGİ: 'status' sütunu zaten mevcut, atlanıyor.");
+        } else {
+            // Başka bir hata varsa göster
+            console.error("Tablo 'posts' güncellenirken hata:", err);
+        }
+    }
+    // --- GÜNCELLEME BLOĞU BİTTİ ---
+
+
+    // 3. Kategorileri ekle/kontrol et (Aynı)
     console.log('Varsayılan kategoriler kontrol ediliyor/ekleniyor...');
     const insertCategoriesQuery = `
         INSERT INTO categories (name, description, slug) VALUES
