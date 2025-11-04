@@ -4,12 +4,12 @@ const express = require('express');
 const { pool } = require('../config/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
+const jwt = require('jsonwebtoken'); // YENİ: user-status için eklendi
 
 const POSTS_PER_PAGE = 20; 
 const REPLIES_PER_PAGE = 20;
 
 // --- KATEGORİ ROTALARI ---
-// (Bu rotalar doğru, dokunmuyoruz)
 router.get('/api/categories', async (req, res) => { 
     try {
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
@@ -38,7 +38,6 @@ router.get('/api/categories/:slug', async (req, res) => {
         `, [slug]);
         
         if (postsInCategory.rows.length === 0) {
-            // Slug'a ait kategori var mı diye bakarız, yoksa 404
             const categoryCheck = await pool.query('SELECT * FROM categories WHERE slug = $1', [slug]);
             if (categoryCheck.rows.length === 0) {
                 return res.status(404).json({ message: 'Kategori bulunamadı.' });
@@ -66,13 +65,11 @@ router.post('/posts', authenticateToken, async (req, res) => {
         try {
             await client.query('BEGIN');
             
-            // 1. Yeni postu ekle
             const newPost = await client.query(
                 'INSERT INTO posts (title, content, author_id, category_id) VALUES ($1, $2, $3, $4) RETURNING *',
                 [title, content, author_id, category_id]
             );
             
-            // 2. Kullanıcının post sayısını güncelle
             await client.query(
                 'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
                 [author_id]
@@ -98,7 +95,6 @@ router.post('/posts', authenticateToken, async (req, res) => {
 // --- ANA SAYFA (SON KONULAR) ---
 router.get('/api/posts/recent', async (req, res) => {
     try {
-        // Bu sorgu ANA SAYFA İÇİN DOĞRU (reply_count ve like_count gerekiyor)
         const recentPosts = await pool.query(`
             SELECT 
                 p.id, p.title, p.is_pinned, p.is_locked, p.created_at, 
@@ -121,15 +117,14 @@ router.get('/api/posts/recent', async (req, res) => {
 });
 
 
-// --- ARŞİV SAYFASI (GÜNCELLENDİ) ---
-// DEĞİŞTİ: Arama (q) parametresi eklendi
+// --- YENİ EKLENDİ: ARŞİV / ARAMA ROTASI (Madde 3 ve Admin Paneli için) ---
 router.get('/api/archive', async (req, res) => {
     try {
         const { categoryId, q } = req.query; // 'q' (query) eklendi
         
         let queryText = `
             SELECT 
-                p.id, p.title, p.created_at, 
+                p.id, p.title, p.created_at, p.is_pinned,
                 c.name AS category_name,
                 u.username AS author_username
             FROM posts p
@@ -147,8 +142,6 @@ router.get('/api/archive', async (req, res) => {
         }
         
         if (q && q.trim() !== '') {
-            // YENİ: Arama terimi (q) eklendi.
-            // ILIKE büyük/küçük harf duyarsız arama yapar. %...% kelimenin/harfin içinde geçeni bulur.
             whereClauses.push(`p.title ILIKE $${paramIndex++}`);
             params.push(`%${q}%`); 
         }
@@ -157,7 +150,8 @@ router.get('/api/archive', async (req, res) => {
             queryText += ' WHERE ' + whereClauses.join(' AND ');
         }
         
-        queryText += ' ORDER BY p.created_at DESC LIMIT 100;'; // Son 100 konuyu getir
+        // Admin paneli için sabitlenmişleri de üste al
+        queryText += ' ORDER BY p.is_pinned DESC, p.created_at DESC LIMIT 100;'; 
 
         const allPosts = await pool.query(queryText, params);
         res.json(allPosts.rows);
@@ -175,14 +169,14 @@ router.get('/api/threads/:id', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const offset = (page - 1) * REPLIES_PER_PAGE;
     
-    // Kullanıcı ID'sini token'dan al (eğer giriş yapmışsa)
     let currentUserId = null;
     if (req.cookies.authToken) {
         try {
+            // YENİ: Token'ı burada da doğrula (güvenlik)
             const user = jwt.verify(req.cookies.authToken, process.env.JWT_SECRET);
             currentUserId = user.id;
         } catch (err) {
-            // Token geçersizse sorun değil, misafir olarak devam et
+            // Token geçersizse misafir olarak devam et
         }
     }
 
@@ -279,7 +273,7 @@ router.get('/api/threads/:id', async (req, res) => {
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
-                totalReplies: totalReplies + (bestReply ? 1 : 0) // Toplam cevap (En iyi dahil)
+                totalReplies: totalReplies + (bestReply ? 1 : 0)
             }
         });
 
@@ -300,7 +294,6 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     }
 
     try {
-        // Konu kilitli mi kontrol et
         const threadCheck = await pool.query('SELECT is_locked, best_reply_id FROM posts WHERE id = $1', [threadId]);
         if (threadCheck.rows.length === 0) {
             return res.status(404).json({ message: 'Konu bulunamadı.' });
@@ -314,14 +307,12 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
         try {
             await client.query('BEGIN');
             
-            // 1. Cevabı ekle
             const newReply = await client.query(
                 'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING id',
                 [content, threadId, authorId]
             );
             newReplyId = newReply.rows[0].id;
             
-            // 2. Kullanıcının post sayısını güncelle
             await client.query(
                 'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
                 [authorId]
@@ -329,7 +320,6 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
             
             await client.query('COMMIT');
             
-            // 3. Kullanıcıyı yönlendirmek için son sayfa numarasını hesapla
             const bestReplyId = threadCheck.rows[0].best_reply_id;
             const totalRepliesQuery = `
                 SELECT COUNT(*) FROM replies 
@@ -365,7 +355,6 @@ router.get('/api/profile/:username', async (req, res) => {
     try {
         const { username } = req.params;
 
-        // 1. Kullanıcı bilgilerini çek
         const userQuery = pool.query(
             'SELECT id, username, avatar_url, title, post_count, created_at FROM users WHERE username = $1',
             [username]
@@ -378,7 +367,6 @@ router.get('/api/profile/:username', async (req, res) => {
         const user = userResult.rows[0];
         const userId = user.id;
 
-        // 2. Kullanıcının son aktivitelerini (cevaplarını) çek
         const recentRepliesQuery = pool.query(`
             SELECT 
                 r.id AS reply_id, 

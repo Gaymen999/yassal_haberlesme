@@ -1,3 +1,5 @@
+// public/admin.js
+
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. HTML'deki elementleri seç
     const container = document.getElementById('posts-management-container');
@@ -11,6 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
         
         try {
+            // Bu rota doğru: /admin/posts/:id
             const response = await fetch(`/admin/posts/${postId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -36,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!confirm(`"${postTitle}" başlıklı konuyu SİLMEK istediğinize emin misiniz? Bu işlem geri alınamaz!`)) return;
         
         try {
+            // Bu rota doğru: /admin/posts/:id
             const response = await fetch(`/admin/posts/${postId}`, {
                 method: 'DELETE',
                 credentials: 'include'
@@ -60,11 +64,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadingMessage.style.display = 'block';
             container.innerHTML = ''; 
 
-            // ***** DÜZELTME BURADA *****
-            // Hatalı adres '/api/posts/all' idi,
-            // Doğru adres '/api/posts/archive' (postRoutes.js'deki rotamız)
-            const response = await fetch('/api/posts/archive', { credentials: 'include' });
-            // ***** DÜZELTME BİTTİ *****
+            // ***** DEĞİŞİKLİK BURADA *****
+            // Hatalı/Eksik adres '/api/posts/archive' idi.
+            // Doğru adres (Arşiv ve Arama için kullandığımız) '/api/archive' olacak.
+            const response = await fetch('/api/archive', { credentials: 'include' });
+            // ***** DEĞİŞİKLİK BİTTİ *****
 
             if (!response.ok) {
                 throw new Error('Sunucudan konular çekilemedi.');
