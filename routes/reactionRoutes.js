@@ -14,11 +14,7 @@ const router = express.Router();
 router.post('/threads/:id/react', authenticateToken, async (req, res) => {
     const { id: threadId } = req.params;
     const userId = req.user.id;
-
-    // DEĞİŞİKLİK BURADA:
-    // req.body 'undefined' olabileceğinden, '?' (optional chaining) ekledik.
-    const reactionType = req.body?.reactionType || 'like'; 
-    // ^^^^^^^^^^^^^^^^^^^^^
+    const reactionType = req.body?.reactionType || 'like'; // Çökme düzeltmesi (req.body?.)
 
     try {
         const existingReaction = await pool.query(
@@ -26,19 +22,38 @@ router.post('/threads/:id/react', authenticateToken, async (req, res) => {
             [userId, threadId]
         );
 
+        let liked = false; // Durumu belirle
+
         if (existingReaction.rows.length > 0) {
+            // 1. Beğeniyi geri al
             await pool.query(
                 'DELETE FROM thread_reactions WHERE user_id = $1 AND thread_id = $2',
                 [userId, threadId]
             );
-            res.status(200).json({ message: 'Beğeni geri alındı.', liked: false });
+            liked = false;
         } else {
+            // 2. Beğen
             await pool.query(
                 'INSERT INTO thread_reactions (user_id, thread_id, reaction_type) VALUES ($1, $2, $3)',
                 [userId, threadId, reactionType]
             );
-            res.status(201).json({ message: 'Konu beğenildi.', liked: true });
+            liked = true;
         }
+        
+        // 3. YENİ: Yeni beğeni sayısını veritabanından tekrar say
+        const countResult = await pool.query(
+            'SELECT COUNT(*) FROM thread_reactions WHERE thread_id = $1',
+            [threadId]
+        );
+        const newLikeCount = parseInt(countResult.rows[0].count, 10);
+        
+        // 4. YENİ: newLikeCount'ı cevaba ekle
+        res.status(liked ? 201 : 200).json({ 
+            message: liked ? 'Konu beğenildi.' : 'Beğeni geri alındı.', 
+            liked: liked,
+            newLikeCount: newLikeCount // Frontend'in beklediği veri
+        });
+
     } catch (err) {
         if (err.code === '23503') { 
             return res.status(404).json({ message: 'Konu bulunamadı.' });
@@ -55,11 +70,7 @@ router.post('/threads/:id/react', authenticateToken, async (req, res) => {
 router.post('/replies/:id/react', authenticateToken, async (req, res) => {
     const { id: replyId } = req.params;
     const userId = req.user.id;
-
-    // DEĞİŞİKLİK BURADA:
-    // req.body 'undefined' olabileceğinden, '?' (optional chaining) ekledik.
-    const reactionType = req.body?.reactionType || 'like';
-    // ^^^^^^^^^^^^^^^^^^^^^
+    const reactionType = req.body?.reactionType || 'like'; // Çökme düzeltmesi (req.body?.)
 
     try {
         const existingReaction = await pool.query(
@@ -67,19 +78,38 @@ router.post('/replies/:id/react', authenticateToken, async (req, res) => {
             [userId, replyId]
         );
 
+        let liked = false; // Durumu belirle
+
         if (existingReaction.rows.length > 0) {
+            // 1. Beğeniyi geri al
             await pool.query(
                 'DELETE FROM reply_reactions WHERE user_id = $1 AND reply_id = $2',
                 [userId, replyId]
             );
-            res.status(200).json({ message: 'Beğeni geri alındı.', liked: false });
+            liked = false;
         } else {
+            // 2. Beğen
             await pool.query(
                 'INSERT INTO reply_reactions (user_id, reply_id, reaction_type) VALUES ($1, $2, $3)',
                 [userId, replyId, reactionType]
             );
-            res.status(201).json({ message: 'Cevap beğenildi.', liked: true });
+            liked = true;
         }
+        
+        // 3. YENİ: Yeni beğeni sayısını veritabanından tekrar say
+        const countResult = await pool.query(
+            'SELECT COUNT(*) FROM reply_reactions WHERE reply_id = $1',
+            [replyId]
+        );
+        const newLikeCount = parseInt(countResult.rows[0].count, 10);
+
+        // 4. YENİ: newLikeCount'ı cevaba ekle
+        res.status(liked ? 201 : 200).json({ 
+            message: liked ? 'Cevap beğenildi.' : 'Beğeni geri alındı.', 
+            liked: liked,
+            newLikeCount: newLikeCount // Frontend'in beklediği veri
+        });
+
     } catch (err) {
         if (err.code === '23503') {
             return res.status(404).json({ message: 'Cevap bulunamadı.' });
