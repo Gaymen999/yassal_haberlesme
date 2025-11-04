@@ -4,23 +4,52 @@ const express = require('express');
 const { pool } = require('../config/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken'); // Kendi kendine token doğrulaması için
 
+// Sabitler
 const POSTS_PER_PAGE = 20; 
 const REPLIES_PER_PAGE = 20;
 
 // --- KATEGORİ ROTALARI ---
+
+// 1. HERKESİN görebileceği, FİLTRESİZ kategori listesi
+// (Arşiv, Kategori sayfaları vb. için)
 router.get('/api/categories', async (req, res) => { 
     try {
         const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
         res.json(categories.rows);
     } catch (err) {
         console.error("Kategorileri getirirken hata:", err.message);
-        res.status(500).json({ message: 'Sunucu Hatası' }); // JSON DÖN
+        // DÜZELTME: JSON hatası yolla
+        res.status(500).json({ message: 'Sunucu Hatası: Kategoriler yüklenemedi.' });
     }
 });
 
-// DEĞİŞTİ: Sadece 'approved' postları gösterecek
+// 2. YENİ ROTA: Sadece "Konu Aç" sayfası için KORUMALI kategori listesi
+router.get('/api/categories/postable', authenticateToken, async (req, res) => {
+    try {
+        let queryText = '';
+        const userRole = req.user.role; // authMiddleware sayesinde req.user var
+
+        if (userRole === 'admin') {
+            // Admin ise TÜM kategorileri getir
+            queryText = 'SELECT * FROM categories ORDER BY name ASC';
+        } else {
+            // Admin değilse, 'Bilgilendirme' kategorisi DIŞINDAKİLERİ getir
+            queryText = "SELECT * FROM categories WHERE slug != 'bilgilendirme' ORDER BY name ASC";
+        }
+        
+        const categories = await pool.query(queryText);
+        res.json(categories.rows);
+
+    } catch (err) {
+        console.error("Yayınlanabilir kategorileri getirirken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu Hatası: Kategoriler yüklenemedi.' });
+    }
+});
+
+// 3. Kategori Detay Sayfası (Kategori içindeki postlar)
+// GÜNCELLENDİ: Sadece 'approved' (onaylı) postları gösterecek
 router.get('/api/categories/:slug', async (req, res) => { 
     try {
         const { slug } = req.params;
@@ -34,10 +63,11 @@ router.get('/api/categories/:slug', async (req, res) => {
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
-            WHERE c.slug = $1 AND p.status = 'approved' -- YENİ FİLTRE
+            WHERE c.slug = $1 AND p.status = 'approved' -- ONAY FİLTRESİ
             ORDER BY p.is_pinned DESC, p.created_at DESC;
         `, [slug]);
         
+        // Bu kısım kategori varsa ama post yoksa 404 vermesin diye
         if (postsInCategory.rows.length === 0) {
             const categoryCheck = await pool.query('SELECT * FROM categories WHERE slug = $1', [slug]);
             if (categoryCheck.rows.length === 0) {
@@ -48,37 +78,48 @@ router.get('/api/categories/:slug', async (req, res) => {
         res.json(postsInCategory.rows);
     } catch (err) {
         console.error("Kategori postlarını getirirken hata:", err.message);
-        res.status(500).json({ message: 'Sunucu Hatası' }); // JSON DÖN
+        res.status(500).json({ message: 'Sunucu Hatası: Konular yüklenemedi.' });
     }
 });
 
 
-// --- YENİ KONU OLUŞTURMA (DEĞİŞTİ) ---
+// --- YENİ KONU OLUŞTURMA (GÜNCELLENDİ) ---
+// (Onay sistemi ve Admin-only kategori koruması eklendi)
 router.post('/posts', authenticateToken, async (req, res) => {
     try {
         const { title, content, category_id } = req.body;
         const author_id = req.user.id;
-        const author_role = req.user.role; // YENİ: Kullanıcı rolünü al
+        const author_role = req.user.role; 
 
         if (!title || !content || !category_id) {
             return res.status(400).json({ message: 'Başlık, içerik ve kategori zorunludur.' });
         }
         
-        // YENİ: Admin ise 'approved', değilse 'pending'
+        // ADMIN KATEGORİSİ GÜVENLİK KONTROLÜ
+        if (author_role !== 'admin') {
+            const categoryCheck = await pool.query('SELECT slug FROM categories WHERE id = $1', [category_id]);
+            
+            if (categoryCheck.rows.length === 0) {
+                return res.status(400).json({ message: 'Geçersiz kategori.' });
+            }
+            // "Bilgilendirme" kategorisinin slug'ı 'bilgilendirme' olmalı
+            if (categoryCheck.rows[0].slug === 'bilgilendirme') { 
+                return res.status(403).json({ message: 'Bu kategoriye sadece adminler konu açabilir.' });
+            }
+        }
+        
+        // ONAY SİSTEMİ MANTIĞI
         const status = (author_role === 'admin') ? 'approved' : 'pending';
         
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
             
-            // YENİ: 'status' sütunu sorguya eklendi
             const newPost = await client.query(
                 'INSERT INTO posts (title, content, author_id, category_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
                 [title, content, author_id, category_id, status]
             );
             
-            // Post sayısını sadece 'approved' ise artırabiliriz veya hep artırabiliriz.
-            // Şimdilik hep artıralım, reddedilirse bir önemi kalmaz.
             await client.query(
                 'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
                 [author_id]
@@ -86,7 +127,6 @@ router.post('/posts', authenticateToken, async (req, res) => {
             
             await client.query('COMMIT');
             
-            // YENİ: Mesajı duruma göre ayarla
             const message = (status === 'approved') 
                 ? 'Konu başarıyla oluşturuldu.' 
                 : 'Konunuz onaya gönderildi. Admin tarafından incelenecektir.';
@@ -94,25 +134,25 @@ router.post('/posts', authenticateToken, async (req, res) => {
             res.status(201).json({ 
                 message: message, 
                 post: newPost.rows[0],
-                status: status // Frontend'in yönlendirme yapması için
+                status: status
             });
 
         } catch (err) {
             await client.query('ROLLBACK');
-            throw err;
+            throw err; // Hata ana 'catch' bloğuna gitsin
         } finally {
             client.release();
         }
 
     } catch (err) {
         console.error("Konu oluştururken hata:", err.message);
-        res.status(500).json({ message: 'Sunucu Hatası' }); // JSON DÖN
+        res.status(500).json({ message: 'Sunucu Hatası: Konu oluşturulamadı.' });
     }
 });
 
 
-// --- ANA SAYFA (SON KONULAR) (DEĞİŞTİ) ---
-// DEĞİŞTİ: Sadece 'approved' postları gösterecek
+// --- ANA SAYFA (SON KONULAR) (GÜNCELLENDİ) ---
+// (Sadece 'approved' postları gösterecek)
 router.get('/api/posts/recent', async (req, res) => {
     try {
         const recentPosts = await pool.query(`
@@ -126,23 +166,23 @@ router.get('/api/posts/recent', async (req, res) => {
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
-            WHERE p.status = 'approved' -- YENİ FİLTRE
+            WHERE p.status = 'approved' -- ONAY FİLTRESİ
             ORDER BY p.is_pinned DESC, p.created_at DESC
             LIMIT 15;
         `);
         res.json(recentPosts.rows);
     } catch (err) {
         console.error("Son konuları getirirken hata:", err.message);
-        res.status(500).json({ message: 'Sunucu Hatası' }); // JSON DÖN
+        res.status(500).json({ message: 'Sunucu Hatası: Konular yüklenemedi.' });
     }
 });
 
 
-// --- ARŞİV SAYFASI (DEĞİŞTİ) ---
-// DEĞİŞTİ: Sadece 'approved' postları gösterecek (ve arama)
+// --- ARŞİV SAYFASI (GÜNCELLENDİ) ---
+// (Sadece 'approved' postları gösterecek + Arama)
 router.get('/api/archive', async (req, res) => {
     try {
-        const { categoryId, q } = req.query; 
+        const { categoryId, q } = req.query; // 'q' (query) eklendi
         
         let queryText = `
             SELECT 
@@ -155,7 +195,7 @@ router.get('/api/archive', async (req, res) => {
         `;
         
         const params = [];
-        // YENİ: Temel filtre her zaman 'approved' olmalı
+        // TEMEL FİLTRE: Her zaman sadece onaylıları göster
         let whereClauses = ["p.status = 'approved'"]; 
         let paramIndex = 1;
 
@@ -169,9 +209,7 @@ router.get('/api/archive', async (req, res) => {
             params.push(`%${q}%`); 
         }
 
-        if (whereClauses.length > 0) {
-            queryText += ' WHERE ' + whereClauses.join(' AND ');
-        }
+        queryText += ' WHERE ' + whereClauses.join(' AND ');
         
         queryText += ' ORDER BY p.is_pinned DESC, p.created_at DESC LIMIT 100;'; 
 
@@ -180,26 +218,28 @@ router.get('/api/archive', async (req, res) => {
         
     } catch (err) {
         console.error("Arşiv getirirken hata:", err.message);
-        res.status(500).json({ message: 'Sunucu Hatası' }); // JSON DÖN
+        res.status(500).json({ message: 'Sunucu Hatası: Arşiv yüklenemedi.' });
     }
 });
 
 
-// --- KONU (THREAD) DETAY SAYFASI (DEĞİŞTİ) ---
+// --- KONU (THREAD) DETAY SAYFASI (GÜNCELLENDİ) ---
+// (Onaylanmamış postları sadece admin/sahibi görebilir)
 router.get('/api/threads/:id', async (req, res) => {
     const { id } = req.params;
     const page = parseInt(req.query.page) || 1;
     const offset = (page - 1) * REPLIES_PER_PAGE;
     
+    // Kullanıcı ID'sini ve ROLÜNÜ token'dan al (eğer giriş yapmışsa)
     let currentUserId = null;
     let currentUserRole = 'user';
     if (req.cookies.authToken) {
         try {
             const user = jwt.verify(req.cookies.authToken, process.env.JWT_SECRET);
             currentUserId = user.id;
-            currentUserRole = user.role; // YENİ: Admin mi diye bak
+            currentUserRole = user.role; // Rolü de al
         } catch (err) {
-            // Misafir
+            // Misafir olarak devam et
         }
     }
 
@@ -225,38 +265,77 @@ router.get('/api/threads/:id', async (req, res) => {
             WHERE p.id = $1;
         `;
         const threadResult = await client.query(threadQuery, [id]);
+        
         if (threadResult.rows.length === 0) {
             client.release();
             return res.status(404).json({ message: 'Konu bulunamadı.' });
         }
         thread = threadResult.rows[0];
 
-        // YENİ: Konu onaylı değilse, sadece admin veya postun sahibi görebilir
+        // ONAY KONTROLÜ
         if (thread.status !== 'approved') {
+            // Onaylı değilse (pending veya rejected ise)
+            // Sadece admin VEYA konunun sahibi görebilir
             if (currentUserRole !== 'admin' && thread.author_id !== currentUserId) {
                 client.release();
                 return res.status(403).json({ message: 'Bu konuyu görme yetkiniz yok.' });
             }
         }
 
-        // 2. Varsa En İyi Cevabı Çek (Kalanı aynı)
+        // 2. Varsa En İyi Cevabı Çek
         if (thread.best_reply_id) {
-            // ... (best reply sorgusu aynı) ...
-            const bestReplyQuery = `...`; // Bu sorgu değişmedi
+            const bestReplyQuery = `
+                SELECT 
+                    r.*,
+                    u.username AS author_username, 
+                    u.avatar_url AS author_avatar,
+                    u.title AS author_title,
+                    u.post_count AS author_post_count,
+                    u.created_at AS author_join_date,
+                    (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
+                    ${currentUserId ? 
+                        `EXISTS(SELECT 1 FROM reply_reactions rr WHERE rr.reply_id = r.id AND rr.user_id = ${currentUserId}) AS is_liked_by_user` 
+                        : 'FALSE AS is_liked_by_user'}
+                FROM replies r
+                JOIN users u ON r.author_id = u.id
+                WHERE r.id = $1;
+            `;
             const bestReplyResult = await client.query(bestReplyQuery, [thread.best_reply_id]);
             if (bestReplyResult.rows.length > 0) {
                 bestReply = bestReplyResult.rows[0];
             }
         }
 
-        // 3. Toplam Cevap Sayısı (Kalanı aynı)
-        const totalRepliesQuery = `...`; // Bu sorgu değişmedi
+        // 3. Toplam Cevap Sayısını (En iyi cevap hariç)
+        const totalRepliesQuery = `
+            SELECT COUNT(*) FROM replies 
+            WHERE thread_id = $1 
+            ${thread.best_reply_id ? `AND id != ${thread.best_reply_id}` : ''}
+        `;
         const totalRepliesResult = await client.query(totalRepliesQuery, [id]);
         totalReplies = parseInt(totalRepliesResult.rows[0].count, 10);
         totalPages = Math.ceil(totalReplies / REPLIES_PER_PAGE);
 
-        // 4. Diğer Cevapları Çek (Kalanı aynı)
-        const repliesQuery = `...`; // Bu sorgu değişmedi
+        // 4. Diğer Cevapları Çek (Sayfalanmış ve En iyi cevap hariç)
+        const repliesQuery = `
+            SELECT 
+                r.*,
+                u.username AS author_username, 
+                u.avatar_url AS author_avatar,
+                u.title AS author_title,
+                u.post_count AS author_post_count,
+                u.created_at AS author_join_date,
+                (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
+                ${currentUserId ? 
+                    `EXISTS(SELECT 1 FROM reply_reactions rr WHERE rr.reply_id = r.id AND rr.user_id = ${currentUserId}) AS is_liked_by_user` 
+                    : 'FALSE AS is_liked_by_user'}
+            FROM replies r
+            JOIN users u ON r.author_id = u.id
+            WHERE r.thread_id = $1
+            ${thread.best_reply_id ? `AND r.id != ${thread.best_reply_id}` : ''}
+            ORDER BY r.created_at ASC
+            LIMIT $2 OFFSET $3;
+        `;
         const repliesResult = await client.query(repliesQuery, [id, REPLIES_PER_PAGE, offset]);
         replies = repliesResult.rows;
         
@@ -266,32 +345,102 @@ router.get('/api/threads/:id', async (req, res) => {
             thread: thread,
             bestReply: bestReply,
             replies: replies,
-            pagination: { /* ... */ }
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalReplies: totalReplies + (bestReply ? 1 : 0) // Toplam cevap (En iyi dahil)
+            }
         });
 
     } catch (err) {
         console.error("Konu detaylarını getirirken hata:", err.message);
-        res.status(500).json({ message: 'Sunucu Hatası' }); // JSON DÖN
+        res.status(500).json({ message: 'Sunucu Hatası: Konu detayları yüklenemedi.' });
     }
 });
 
-// --- KONUYA CEVAP VERME (Aynı, değişmedi) ---
+// --- KONUYA CEVAP VERME (Değişmedi) ---
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
-    // ... (Bu fonksiyonun içi aynı) ...
+    const { id: threadId } = req.params;
+    const { content } = req.body;
+    const authorId = req.user.id;
+
+    if (!content) {
+        return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
+    }
+
+    try {
+        // Konu kilitli mi VEYA onaylı mı diye kontrol et (onaylı değilse de cevap yazılabilir)
+        const threadCheck = await pool.query('SELECT is_locked, best_reply_id, status FROM posts WHERE id = $1', [threadId]);
+        if (threadCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'Konu bulunamadı.' });
+        }
+        if (threadCheck.rows[0].is_locked) {
+            return res.status(403).json({ message: 'Bu konu kilitlenmiştir, cevap yazılamaz.' });
+        }
+        
+        const client = await pool.connect();
+        let newReplyId;
+        try {
+            await client.query('BEGIN');
+            
+            // 1. Cevabı ekle
+            const newReply = await client.query(
+                'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING id',
+                [content, threadId, authorId]
+            );
+            newReplyId = newReply.rows[0].id;
+            
+            // 2. Kullanıcının post sayısını güncelle
+            await client.query(
+                'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
+                [authorId]
+            );
+            
+            await client.query('COMMIT');
+            
+            // 3. Kullanıcıyı yönlendirmek için son sayfa numarasını hesapla
+            const bestReplyId = threadCheck.rows[0].best_reply_id;
+            const totalRepliesQuery = `
+                SELECT COUNT(*) FROM replies 
+                WHERE thread_id = $1 
+                ${bestReplyId ? `AND id != ${bestReplyId}` : ''}
+            `;
+            const totalRepliesResult = await pool.query(totalRepliesQuery, [threadId]);
+            const totalReplies = parseInt(totalRepliesResult.rows[0].count, 10);
+            const lastPage = Math.ceil(totalReplies / REPLIES_PER_PAGE);
+
+            res.status(201).json({ 
+                message: 'Cevap başarıyla eklendi.', 
+                replyId: newReplyId, 
+                lastPage: lastPage 
+            });
+
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+
+    } catch (err) {
+        console.error("Cevap eklerken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu Hatası: Cevap eklenemedi.' });
+    }
 });
 
 
-// --- KULLANICI PROFİL ROTASI (DEĞİŞTİ) ---
-// YENİ: Kullanıcının reddedilen postlarını da çekeceğiz
+// --- KULLANICI PROFİL ROTASI (GÜNCELLENDİ) ---
+// (Reddedilen ve Onay Bekleyen postları da çekecek)
 router.get('/api/profile/:username', async (req, res) => {
     try {
         const { username } = req.params;
 
         // 1. Kullanıcı bilgilerini çek
-        const userResult = await pool.query(
+        const userQuery = pool.query(
             'SELECT id, username, avatar_url, title, post_count, created_at FROM users WHERE username = $1',
             [username]
         );
+        const userResult = await userQuery;
 
         if (userResult.rows.length === 0) {
             return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
@@ -299,14 +448,18 @@ router.get('/api/profile/:username', async (req, res) => {
         const user = userResult.rows[0];
         const userId = user.id;
 
-        // 2. Kullanıcının son aktivitelerini (cevaplarını) çek (Bu aynı)
+        // 2. Kullanıcının son aktivitelerini (cevaplarını) çek
+        // (Sadece 'approved' konulardaki cevaplar)
         const recentRepliesQuery = pool.query(`
             SELECT 
-                r.id AS reply_id, r.content, r.created_at,
-                p.id AS thread_id, p.title AS thread_title
+                r.id AS reply_id, 
+                r.content, 
+                r.created_at,
+                p.id AS thread_id,
+                p.title AS thread_title
             FROM replies r
             JOIN posts p ON r.thread_id = p.id
-            WHERE r.author_id = $1 AND p.status = 'approved' -- Sadece onaylı konulardaki cevaplar
+            WHERE r.author_id = $1 AND p.status = 'approved'
             ORDER BY r.created_at DESC
             LIMIT 15;
         `, [userId]);
@@ -343,7 +496,7 @@ router.get('/api/profile/:username', async (req, res) => {
 
     } catch (err) {
         console.error("Profil getirirken hata:", err.message);
-        res.status(500).json({ message: 'Sunucu Hatası' }); // JSON DÖN
+        res.status(500).json({ message: 'Sunucu Hatası: Profil yüklenemedi.' });
     }
 });
 

@@ -23,14 +23,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // Kategorileri çeken fonksiyon (Aynı)
+    // --- DEĞİŞTİ: Kategorileri çeken fonksiyon ---
     const fetchCategories = async () => {
         try {
-            const response = await fetch('/api/categories');
-            if (!response.ok) throw new Error('Kategoriler yüklenemedi.');
+            // YENİ ROTA: Artık 'postable' (yayınlanabilir) rotasını çağırıyoruz.
+            // Bu rota korumalı olduğu için 'credentials: include' ŞART.
+            const response = await fetch('/api/categories/postable', {
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                // Bu rota authenticateToken kullandığı için 401/403 hatası verebilir.
+                // global.js zaten bu durumda kullanıcıyı login'e atacaktır,
+                // ama biz yine de hatayı konsola yazalım.
+                throw new Error('Kategoriler yüklenemedi. Sunucu yanıtı: ' + response.status);
+            }
             
             const categories = await response.json();
             
+            // (Kalanı aynı)
             categories.forEach(category => {
                 const option = document.createElement('option');
                 option.value = category.id;
@@ -42,8 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
             messageElement.textContent = 'Kategoriler yüklenemedi, lütfen sayfayı yenileyin.';
         }
     };
+    // --- DEĞİŞİKLİK BİTTİ ---
 
-    // --- DEĞİŞTİ: Form gönderme fonksiyonu ---
+
+    // Form gönderme fonksiyonu (Aynı)
     const handleSubmit = async (e) => {
         e.preventDefault();
         messageElement.textContent = '';
@@ -69,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cleanContent = DOMPurify.sanitize(content);
 
         try {
+            // (Bu fetch aynı, /posts rotasını çağırıyor)
             const response = await fetch('/posts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -83,20 +97,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (response.ok) {
-                // YENİ: Mesaj ve yönlendirme backend'den gelen 'status'e göre değişiyor
+                // (Bu mesaj ve yönlendirme mantığı aynı)
                 messageElement.style.color = 'green';
                 
                 if (data.status === 'approved') {
-                    // Admin post attıysa
                     messageElement.textContent = 'Konunuz başarıyla yayınlandı! Yönlendiriliyorsunuz...';
                     setTimeout(() => {
                         window.location.href = `/thread.html?id=${data.post.id}`;
                     }, 2000);
                 } else {
-                    // Normal kullanıcı post attıysa
                     messageElement.textContent = 'Konunuz onaya gönderildi! Admin incelemesinden sonra yayınlanacaktır. Ana sayfaya yönlendiriliyorsunuz...';
                     setTimeout(() => {
-                        window.location.href = '/index.html'; // Ana sayfaya yönlendir
+                        window.location.href = '/index.html';
                     }, 3000);
                 }
             } else {

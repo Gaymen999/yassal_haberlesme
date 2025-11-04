@@ -34,7 +34,6 @@ const createTables = async () => {
     );
   `;
 
-  // Bu sorgu, 'status' sütununu YENİ tablolar için tanımlar
   const postsTableQuery = `
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -89,25 +88,23 @@ const createTables = async () => {
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
 
-    // --- ÖNEMLİ: 'posts' TABLOSUNU GÜNCELLEME BLOĞU ---
-    // Bu kod, 'status' sütunu yoksa ekler, varsa hata vermeden geçer.
+    // 2. 'status' sütununu kontrol et/ekle (Bu zaten vardı, aynen kalıyor)
     console.log("'posts' tablosu 'status' sütunu için kontrol ediliyor...");
     try {
         await pool.query("ALTER TABLE posts ADD COLUMN status VARCHAR(20) DEFAULT 'pending' NOT NULL");
         console.log("BİLGİ: 'status' sütunu 'posts' tablosuna başarıyla eklendi.");
     } catch (err) {
-        if (err.code === '42701') { // 42701 = column already exists (sütun zaten var)
+        if (err.code === '42701') { // Sütun zaten var
             console.log("BİLGİ: 'status' sütunu zaten mevcut, atlanıyor.");
         } else {
-            // Başka bir hata varsa göster
             console.error("Tablo 'posts' güncellenirken hata:", err);
         }
     }
-    // --- GÜNCELLEME BLOĞU BİTTİ ---
 
-
-    // 3. Kategorileri ekle/kontrol et (Aynı)
+    // 3. Kategorileri ekle/kontrol et
     console.log('Varsayılan kategoriler kontrol ediliyor/ekleniyor...');
+    
+    // --- DEĞİŞTİ: "Bilgilendirme" kategorisi eklendi ---
     const insertCategoriesQuery = `
         INSERT INTO categories (name, description, slug) VALUES
         ('9. Sınıf', '9. Sınıf duyuruları ve tartışmaları.', '9-sinif'),
@@ -115,9 +112,12 @@ const createTables = async () => {
         ('11. Sınıf', '11. Sınıf duyuruları ve tartışmaları.', '11-sinif'),
         ('12. Sınıf', '12. Sınıf duyuruları ve tartışmaları.', '12-sinif'),
         ('Hocalar Hakkında Bilgilendirme', 'Hocalarla ilgili genel bilgilendirmeler.', 'hocalar-hakkinda-bilgilendirme'),
-        ('Ders Notu', 'Paylaşılan ders notları ve kaynaklar.', 'ders-notu')
+        ('Ders Notu', 'Paylaşılan ders notları ve kaynaklar.', 'ders-notu'),
+        ('Bilgilendirme', 'Sadece adminlerin kullanabildiği genel bilgilendirme kanalı.', 'bilgilendirme') -- YENİ KATEGORİ
         ON CONFLICT (slug) DO NOTHING; 
     `;
+    // --- DEĞİŞİKLİK BİTTİ ---
+    
     await pool.query(insertCategoriesQuery);
     console.log('Kategori kontrolü tamamlandı.');
 
