@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { pool } = require('../config/db');
-const { authenticateToken } = require('../middleware/authMiddleware'); // Koruma için şart
+const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 // --- REAKSİYON ROTALARI ---
@@ -14,7 +14,11 @@ const router = express.Router();
 router.post('/threads/:id/react', authenticateToken, async (req, res) => {
     const { id: threadId } = req.params;
     const userId = req.user.id;
-    const reactionType = req.body.reactionType || 'like'; 
+
+    // DEĞİŞİKLİK BURADA:
+    // req.body 'undefined' olabileceğinden, '?' (optional chaining) ekledik.
+    const reactionType = req.body?.reactionType || 'like'; 
+    // ^^^^^^^^^^^^^^^^^^^^^
 
     try {
         const existingReaction = await pool.query(
@@ -36,11 +40,10 @@ router.post('/threads/:id/react', authenticateToken, async (req, res) => {
             res.status(201).json({ message: 'Konu beğenildi.', liked: true });
         }
     } catch (err) {
-        if (err.code === '23503') { // Foreign key hatası (konu yoksa)
+        if (err.code === '23503') { 
             return res.status(404).json({ message: 'Konu bulunamadı.' });
         }
         console.error("Konu Reaksiyon hatası:", err.message);
-        // DEĞİŞTİ: res.send() yerine JSON yolla
         res.status(500).json({ message: 'Sunucu hatası: Beğenme işlemi yapılamadı.' });
     }
 });
@@ -52,7 +55,11 @@ router.post('/threads/:id/react', authenticateToken, async (req, res) => {
 router.post('/replies/:id/react', authenticateToken, async (req, res) => {
     const { id: replyId } = req.params;
     const userId = req.user.id;
-    const reactionType = req.body.reactionType || 'like';
+
+    // DEĞİŞİKLİK BURADA:
+    // req.body 'undefined' olabileceğinden, '?' (optional chaining) ekledik.
+    const reactionType = req.body?.reactionType || 'like';
+    // ^^^^^^^^^^^^^^^^^^^^^
 
     try {
         const existingReaction = await pool.query(
@@ -74,11 +81,10 @@ router.post('/replies/:id/react', authenticateToken, async (req, res) => {
             res.status(201).json({ message: 'Cevap beğenildi.', liked: true });
         }
     } catch (err) {
-        if (err.code === '23503') { // Foreign key hatası (cevap yoksa)
+        if (err.code === '23503') {
             return res.status(404).json({ message: 'Cevap bulunamadı.' });
         }
         console.error("Cevap Reaksiyon hatası:", err.message);
-        // DEĞİŞTİ: res.send() yerine JSON yolla
         res.status(500).json({ message: 'Sunucu hatası: Beğenme işlemi yapılamadı.' });
     }
 });
