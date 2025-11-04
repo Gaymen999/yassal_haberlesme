@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-R">
+    <meta charset="UTF-R"> <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Konu Arşivi</title>
     <link rel="stylesheet" href="style.css">
@@ -15,6 +15,12 @@
 
     <main>
         <h2>Konu Arşivi</h2>
+
+        <div id="search-container" class="category-filters" style="padding: 10px;">
+             <input type="text" id="search-input" placeholder="Konu başlığında ara..." style="flex-grow: 1; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 3px;">
+             <button id="search-button" class="filter-btn active" style="background-color: #005A9C; color: white;">Ara</button>
+             <button id="clear-search-button" class="filter-btn" style="background-color: #777; color: white;">Temizle</button>
+        </div>
         
         <div id="category-filters" class="category-filters">
             <p>Filtrele:</p>
@@ -31,6 +37,5 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="global.js"></script>
-    <script src="archive.js"></script>
-</body>
+    <script src="archive.js"></script> </body>
 </html>

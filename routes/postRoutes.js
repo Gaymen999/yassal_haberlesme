@@ -1,3 +1,5 @@
+// routes/postRoutes.js
+
 const express = require('express');
 const { pool } = require('../config/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
@@ -32,72 +34,83 @@ router.get('/api/categories/:slug', async (req, res) => {
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
             WHERE c.slug = $1
-            ORDER BY p.is_pinned DESC, p.created_at DESC; -- (Bu sorgu zaten doğruymuş)
+            ORDER BY p.is_pinned DESC, p.created_at DESC;
         `, [slug]);
         
         if (postsInCategory.rows.length === 0) {
-            return res.status(404).json({ message: 'Bu kategori bulunamadı veya hiç konu içermiyor.' });
+            // Slug'a ait kategori var mı diye bakarız, yoksa 404
+            const categoryCheck = await pool.query('SELECT * FROM categories WHERE slug = $1', [slug]);
+            if (categoryCheck.rows.length === 0) {
+                return res.status(404).json({ message: 'Kategori bulunamadı.' });
+            }
         }
         
         res.json(postsInCategory.rows);
     } catch (err) {
-        console.error("Kategori konularını getirirken hata:", err.message);
+        console.error("Kategori postlarını getirirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
 
-
-// --- KONU (POST) ROTALARI ---
-
-// YENİ KONU OLUŞTURMA
-// (Bu rota doğru, dokunmuyoruz)
+// --- YENİ KONU OLUŞTURMA ---
 router.post('/posts', authenticateToken, async (req, res) => {
     try {
         const { title, content, category_id } = req.body;
         const author_id = req.user.id; 
 
         if (!title || !content || !category_id) {
-            return res.status(400).json({ message: 'Başlık, içerik ve kategori ID zorunludur.' });
+            return res.status(400).json({ message: 'Başlık, içerik ve kategori zorunludur.' });
+        }
+        
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            // 1. Yeni postu ekle
+            const newPost = await client.query(
+                'INSERT INTO posts (title, content, author_id, category_id) VALUES ($1, $2, $3, $4) RETURNING *',
+                [title, content, author_id, category_id]
+            );
+            
+            // 2. Kullanıcının post sayısını güncelle
+            await client.query(
+                'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
+                [author_id]
+            );
+            
+            await client.query('COMMIT');
+            
+            res.status(201).json({ message: 'Konu başarıyla oluşturuldu.', post: newPost.rows[0] });
+
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
         }
 
-        const newPost = await pool.query(
-            `INSERT INTO posts (title, content, author_id, category_id) 
-             VALUES ($1, $2, $3, $4) 
-             RETURNING id, title, created_at`,
-            [title, content, author_id, category_id]
-        );
-        
-        // Kullanıcının post_count'unu artır
-        await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [author_id]);
-
-        res.status(201).json({ message: 'Konu başarıyla oluşturuldu.', post: newPost.rows[0] });
     } catch (err) {
-        console.error("Konu oluşturulurken hata:", err.message);
+        console.error("Konu oluştururken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
 
-
-// ANA SAYFA - SON KONULARI GETİR (15 ADET)
-router.get('/api/posts/recent', async (req, res) => { 
+// --- ANA SAYFA (SON KONULAR) ---
+router.get('/api/posts/recent', async (req, res) => {
     try {
+        // Bu sorgu ANA SAYFA İÇİN DOĞRU (reply_count ve like_count gerekiyor)
         const recentPosts = await pool.query(`
             SELECT 
                 p.id, p.title, p.is_pinned, p.is_locked, p.created_at, 
                 c.name AS category_name,
                 c.slug AS category_slug,
                 u.username AS author_username,
-                u.avatar_url AS author_avatar,
                 (SELECT COUNT(*) FROM replies r WHERE r.thread_id = p.id) AS reply_count,
                 (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count
             FROM posts p
             JOIN users u ON p.author_id = u.id
             JOIN categories c ON p.category_id = c.id
-            
-            -- HATA BURADAYDI (last_activity_at yoktu) --
-            ORDER BY p.is_pinned DESC, p.created_at DESC 
-            -- DÜZELTİLDİ --
-            
+            ORDER BY p.is_pinned DESC, p.created_at DESC
             LIMIT 15;
         `);
         res.json(recentPosts.rows);
@@ -107,11 +120,12 @@ router.get('/api/posts/recent', async (req, res) => {
     }
 });
 
-// ARŞİV SAYFASI - TÜM KONULARI GETİR (KATEGORİ FİLTRELİ)
-// (Bu rota doğru, dokunmuyoruz)
+
+// --- ARŞİV SAYFASI (GÜNCELLENDİ) ---
+// DEĞİŞTİ: Arama (q) parametresi eklendi
 router.get('/api/archive', async (req, res) => {
     try {
-        const { categoryId } = req.query; 
+        const { categoryId, q } = req.query; // 'q' (query) eklendi
         
         let queryText = `
             SELECT 
@@ -124,10 +138,23 @@ router.get('/api/archive', async (req, res) => {
         `;
         
         const params = [];
-        
+        let whereClauses = [];
+        let paramIndex = 1;
+
         if (categoryId) {
+            whereClauses.push(`p.category_id = $${paramIndex++}`);
             params.push(categoryId);
-            queryText += ' WHERE p.category_id = $1';
+        }
+        
+        if (q && q.trim() !== '') {
+            // YENİ: Arama terimi (q) eklendi.
+            // ILIKE büyük/küçük harf duyarsız arama yapar. %...% kelimenin/harfin içinde geçeni bulur.
+            whereClauses.push(`p.title ILIKE $${paramIndex++}`);
+            params.push(`%${q}%`); 
+        }
+
+        if (whereClauses.length > 0) {
+            queryText += ' WHERE ' + whereClauses.join(' AND ');
         }
         
         queryText += ' ORDER BY p.created_at DESC LIMIT 100;'; // Son 100 konuyu getir
@@ -142,151 +169,196 @@ router.get('/api/archive', async (req, res) => {
 });
 
 
-// (Kalan rotalar (TEK KONU GETİRME, CEVAP YAZMA, PROFİL GETİRME) doğru, dokunmuyoruz)
-
-// TEK KONU (THREAD) VE CEVAPLARINI GETİR
+// --- KONU (THREAD) DETAY SAYFASI ---
 router.get('/api/threads/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const page = parseInt(req.query.page) || 1;
-        const offset = (page - 1) * REPLIES_PER_PAGE;
+    const { id } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const offset = (page - 1) * REPLIES_PER_PAGE;
+    
+    // Kullanıcı ID'sini token'dan al (eğer giriş yapmışsa)
+    let currentUserId = null;
+    if (req.cookies.authToken) {
+        try {
+            const user = jwt.verify(req.cookies.authToken, process.env.JWT_SECRET);
+            currentUserId = user.id;
+        } catch (err) {
+            // Token geçersizse sorun değil, misafir olarak devam et
+        }
+    }
 
-        // 1. Konu (Thread) Bilgileri
-        const threadQuery = pool.query(`
+    try {
+        const client = await pool.connect();
+        let thread, replies, bestReply = null, totalReplies, totalPages;
+
+        // 1. Ana Konu (Thread) Bilgilerini Çek
+        const threadQuery = `
             SELECT 
-                p.id, p.title, p.content, p.created_at, p.is_locked, p.is_pinned, p.best_reply_id,
-                p.author_id,
-                u.username AS author_username,
+                p.*, 
+                u.username AS author_username, 
                 u.avatar_url AS author_avatar,
                 u.title AS author_title,
                 u.post_count AS author_post_count,
                 u.created_at AS author_join_date,
-                c.name AS category_name,
-                c.slug AS category_slug,
                 (SELECT COUNT(*) FROM thread_reactions tr WHERE tr.thread_id = p.id) AS like_count,
-                (SELECT EXISTS (
-                    SELECT 1 FROM thread_reactions tr 
-                    WHERE tr.thread_id = p.id AND tr.user_id = $2
-                )) AS user_has_liked
+                ${currentUserId ? 
+                    `EXISTS(SELECT 1 FROM thread_reactions tr WHERE tr.thread_id = p.id AND tr.user_id = ${currentUserId}) AS is_liked_by_user` 
+                    : 'FALSE AS is_liked_by_user'}
             FROM posts p
             JOIN users u ON p.author_id = u.id
-            JOIN categories c ON p.category_id = c.id
             WHERE p.id = $1;
-        `, [id, req.user?.id || 0]); // req.user.id yoksa 0 ata (misafir)
-
-        // 2. Toplam Cevap Sayısı (Sayfalama için)
-        const totalRepliesQuery = pool.query('SELECT COUNT(*) FROM replies WHERE thread_id = $1', [id]);
-
-        // 3. Varsa "En İyi Cevap"
-        const bestReplyQuery = pool.query(`
-            SELECT 
-                r.id, r.content, r.created_at, r.author_id,
-                u.username AS author_username,
-                u.avatar_url AS author_avatar,
-                u.title AS author_title,
-                u.post_count AS author_post_count,
-                u.created_at AS author_join_date,
-                (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
-                (SELECT EXISTS (
-                    SELECT 1 FROM reply_reactions rr 
-                    WHERE rr.reply_id = r.id AND rr.user_id = $2
-                )) AS user_has_liked
-            FROM replies r
-            JOIN users u ON r.author_id = u.id
-            WHERE r.id = (SELECT best_reply_id FROM posts WHERE id = $1)
-        `, [id, req.user?.id || 0]);
-
-        // 4. Normal Cevaplar (Sayfalanmış)
-        const repliesQuery = pool.query(`
-            SELECT 
-                r.id, r.content, r.created_at, r.author_id,
-                u.username AS author_username,
-                u.avatar_url AS author_avatar,
-                u.title AS author_title,
-                u.post_count AS author_post_count,
-                u.created_at AS author_join_date,
-                (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
-                (SELECT EXISTS (
-                    SELECT 1 FROM reply_reactions rr 
-                    WHERE rr.reply_id = r.id AND rr.user_id = $2
-                )) AS user_has_liked
-            FROM replies r
-            JOIN users u ON r.author_id = u.id
-            WHERE r.thread_id = $1 
-              AND r.id != (SELECT best_reply_id FROM posts WHERE id = $1)
-            ORDER BY r.created_at ASC
-            LIMIT $3 OFFSET $4;
-        `, [id, req.user?.id || 0, REPLIES_PER_PAGE, offset]);
-
-        // Tüm sorguları aynı anda çalıştır
-        const [
-            threadResult, 
-            totalRepliesResult, 
-            bestReplyResult, 
-            repliesResult
-        ] = await Promise.all([threadQuery, totalRepliesQuery, bestReplyQuery, repliesQuery]);
-
+        `;
+        const threadResult = await client.query(threadQuery, [id]);
         if (threadResult.rows.length === 0) {
             return res.status(404).json({ message: 'Konu bulunamadı.' });
         }
+        thread = threadResult.rows[0];
 
-        const totalReplies = parseInt(totalRepliesResult.rows[0].count, 10);
-        const totalPages = Math.ceil(totalReplies / REPLIES_PER_PAGE);
+        // 2. Varsa En İyi Cevabı Çek
+        if (thread.best_reply_id) {
+            const bestReplyQuery = `
+                SELECT 
+                    r.*,
+                    u.username AS author_username, 
+                    u.avatar_url AS author_avatar,
+                    u.title AS author_title,
+                    u.post_count AS author_post_count,
+                    u.created_at AS author_join_date,
+                    (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
+                    ${currentUserId ? 
+                        `EXISTS(SELECT 1 FROM reply_reactions rr WHERE rr.reply_id = r.id AND rr.user_id = ${currentUserId}) AS is_liked_by_user` 
+                        : 'FALSE AS is_liked_by_user'}
+                FROM replies r
+                JOIN users u ON r.author_id = u.id
+                WHERE r.id = $1;
+            `;
+            const bestReplyResult = await client.query(bestReplyQuery, [thread.best_reply_id]);
+            if (bestReplyResult.rows.length > 0) {
+                bestReply = bestReplyResult.rows[0];
+            }
+        }
+
+        // 3. Toplam Cevap Sayısını (En iyi cevap hariç)
+        const totalRepliesQuery = `
+            SELECT COUNT(*) FROM replies 
+            WHERE thread_id = $1 
+            ${thread.best_reply_id ? `AND id != ${thread.best_reply_id}` : ''}
+        `;
+        const totalRepliesResult = await client.query(totalRepliesQuery, [id]);
+        totalReplies = parseInt(totalRepliesResult.rows[0].count, 10);
+        totalPages = Math.ceil(totalReplies / REPLIES_PER_PAGE);
+
+        // 4. Diğer Cevapları Çek (Sayfalanmış ve En iyi cevap hariç)
+        const repliesQuery = `
+            SELECT 
+                r.*,
+                u.username AS author_username, 
+                u.avatar_url AS author_avatar,
+                u.title AS author_title,
+                u.post_count AS author_post_count,
+                u.created_at AS author_join_date,
+                (SELECT COUNT(*) FROM reply_reactions rr WHERE rr.reply_id = r.id) AS like_count,
+                ${currentUserId ? 
+                    `EXISTS(SELECT 1 FROM reply_reactions rr WHERE rr.reply_id = r.id AND rr.user_id = ${currentUserId}) AS is_liked_by_user` 
+                    : 'FALSE AS is_liked_by_user'}
+            FROM replies r
+            JOIN users u ON r.author_id = u.id
+            WHERE r.thread_id = $1
+            ${thread.best_reply_id ? `AND r.id != ${thread.best_reply_id}` : ''}
+            ORDER BY r.created_at ASC
+            LIMIT $2 OFFSET $3;
+        `;
+        const repliesResult = await client.query(repliesQuery, [id, REPLIES_PER_PAGE, offset]);
+        replies = repliesResult.rows;
+        
+        client.release();
 
         res.json({
-            thread: threadResult.rows[0],
-            bestReply: bestReplyResult.rows.length > 0 ? bestReplyResult.rows[0] : null,
-            replies: repliesResult.rows,
+            thread: thread,
+            bestReply: bestReply,
+            replies: replies,
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
-                totalReplies: totalReplies
+                totalReplies: totalReplies + (bestReply ? 1 : 0) // Toplam cevap (En iyi dahil)
             }
         });
+
     } catch (err) {
-        console.error("Konu getirilirken hata:", err.message);
+        console.error("Konu detaylarını getirirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
 
-
-// BİR KONUYA CEVAP YAZMA
+// --- KONUYA CEVAP VERME ---
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
+    const { id: threadId } = req.params;
+    const { content } = req.body;
+    const authorId = req.user.id;
+
+    if (!content) {
+        return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
+    }
+
     try {
-        const { id: threadId } = req.params;
-        const { content } = req.body;
-        const author_id = req.user.id;
-
-        if (!content) {
-            return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
-        }
-
-        // Konu kilitli mi diye kontrol et
-        const threadCheck = await pool.query('SELECT is_locked FROM posts WHERE id = $1', [threadId]);
+        // Konu kilitli mi kontrol et
+        const threadCheck = await pool.query('SELECT is_locked, best_reply_id FROM posts WHERE id = $1', [threadId]);
         if (threadCheck.rows.length === 0) {
-            return res.status(404).json({ message: 'Cevap yazmaya çalıştığınız konu bulunamadı.' });
+            return res.status(404).json({ message: 'Konu bulunamadı.' });
         }
         if (threadCheck.rows[0].is_locked) {
-            return res.status(403).json({ message: 'Bu konu kilitlendiği için cevap yazılamaz.' });
+            return res.status(403).json({ message: 'Bu konu kilitlenmiştir, cevap yazılamaz.' });
         }
-
-        const newReply = await pool.query(
-            'INSERT INTO replies (thread_id, author_id, content) VALUES ($1, $2, $3) RETURNING *',
-            [threadId, author_id, content]
-        );
         
-        // Kullanıcının post_count'unu artır
-        await pool.query('UPDATE users SET post_count = post_count + 1 WHERE id = $1', [author_id]);
+        const client = await pool.connect();
+        let newReplyId;
+        try {
+            await client.query('BEGIN');
+            
+            // 1. Cevabı ekle
+            const newReply = await client.query(
+                'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING id',
+                [content, threadId, authorId]
+            );
+            newReplyId = newReply.rows[0].id;
+            
+            // 2. Kullanıcının post sayısını güncelle
+            await client.query(
+                'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
+                [authorId]
+            );
+            
+            await client.query('COMMIT');
+            
+            // 3. Kullanıcıyı yönlendirmek için son sayfa numarasını hesapla
+            const bestReplyId = threadCheck.rows[0].best_reply_id;
+            const totalRepliesQuery = `
+                SELECT COUNT(*) FROM replies 
+                WHERE thread_id = $1 
+                ${bestReplyId ? `AND id != ${bestReplyId}` : ''}
+            `;
+            const totalRepliesResult = await pool.query(totalRepliesQuery, [threadId]);
+            const totalReplies = parseInt(totalRepliesResult.rows[0].count, 10);
+            const lastPage = Math.ceil(totalReplies / REPLIES_PER_PAGE);
 
-        res.status(201).json({ message: 'Cevap başarıyla gönderildi.', reply: newReply.rows[0] });
-    } catch (err) {
-        console.error("Cevap gönderilirken hata:", err.message);
-        if (err.code === '23503') { // Foreign key violation
-             return res.status(404).json({ message: 'Cevap yazmaya çalıştığınız konu bulunamadı.' });
+            res.status(201).json({ 
+                message: 'Cevap başarıyla eklendi.', 
+                replyId: newReplyId, 
+                lastPage: lastPage 
+            });
+
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
         }
+
+    } catch (err) {
+        console.error("Cevap eklerken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });
+
 
 // --- KULLANICI PROFİL ROTASI ---
 router.get('/api/profile/:username', async (req, res) => {
@@ -329,7 +401,7 @@ router.get('/api/profile/:username', async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Profil getirilirken hata:", err.message);
+        console.error("Profil getirirken hata:", err.message);
         res.status(500).send('Sunucu Hatası');
     }
 });

@@ -1,9 +1,17 @@
+// archive.js (TÜM DOSYA)
+
 document.addEventListener('DOMContentLoaded', () => {
     const archiveContainer = document.getElementById('archive-container');
     const filtersContainer = document.getElementById('category-filters');
     
-    // Aktif filtreyi tutmak için
+    // YENİ: Arama elementleri
+    const searchInput = document.getElementById('search-input');
+    const searchButton = document.getElementById('search-button');
+    const clearSearchButton = document.getElementById('clear-search-button');
+    
+    // Aktif filtreleri tutmak için
     let currentCategoryId = null;
+    let currentSearchTerm = ''; // YENİ
 
     // --- 1. Kategorileri Çek ve Filtre Butonlarını Oluştur ---
     const fetchCategories = async () => {
@@ -19,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
             allButton.classList.add('filter-btn', 'active'); // Başlangıçta aktif
             allButton.addEventListener('click', () => {
                 currentCategoryId = null;
-                fetchArchivedPosts();
+                fetchArchivedPosts(); // API'yi çağır
                 updateActiveButton(allButton);
             });
             filtersContainer.appendChild(allButton);
@@ -31,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 button.classList.add('filter-btn');
                 button.addEventListener('click', () => {
                     currentCategoryId = category.id;
-                    fetchArchivedPosts();
+                    fetchArchivedPosts(); // API'yi çağır
                     updateActiveButton(button);
                 });
                 filtersContainer.appendChild(button);
@@ -43,13 +51,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- 2. Arşiv Postlarını Çek ve Render Et ---
+    // --- 2. Arşiv Postlarını Çek ve Render Et (GÜNCELLENDİ) ---
     const fetchArchivedPosts = async () => {
         archiveContainer.innerHTML = '<p>Arşiv yükleniyor...</p>';
         
-        let apiUrl = '/api/archive-posts';
+        // URL'i dinamik olarak oluştur
+        const params = new URLSearchParams();
         if (currentCategoryId) {
-            apiUrl += `?category_id=${currentCategoryId}`;
+            params.append('categoryId', currentCategoryId);
+        }
+        if (currentSearchTerm) { // YENİ
+            params.append('q', currentSearchTerm);
+        }
+
+        // '?' sadece parametre varsa eklenir
+        const queryString = params.toString();
+        let apiUrl = '/api/archive';
+        if (queryString) {
+            apiUrl += `?${queryString}`;
         }
         
         try {
@@ -60,11 +79,11 @@ document.addEventListener('DOMContentLoaded', () => {
             archiveContainer.innerHTML = ''; 
 
             if (posts.length === 0) {
-                archiveContainer.innerHTML = '<p>Bu filtrede gösterilecek arşivlenmiş konu bulunmamaktadır.</p>';
+                archiveContainer.innerHTML = '<p>Bu kriterlere uyan arşivlenmiş konu bulunmamaktadır.</p>';
                 return;
             }
 
-            // DEĞİŞTİ: Artık ana sayfadaki gibi .post-card render ediyoruz
+            // (Render kısmı (forEach) aynı, değişmedi)
             posts.forEach(post => {
                 const postElement = document.createElement('div');
                 postElement.classList.add('post-card'); 
@@ -77,8 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
                 const safeCategoryName = DOMPurify.sanitize(post.category_name || 'Kategorisiz');
 
-                // Not: Arşiv API'si cevap/beğeni sayısını çekmiyor,
-                // bu yüzden ana sayfadan daha sade bir kart gösteriyoruz.
                 postElement.innerHTML = `
                     <div class="post-header">
                         <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
@@ -98,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- 3. Yardımcı Fonksiyon (Aktif butonu güncelle) ---
+    // (Bu fonksiyon aynı, değişmedi)
     const updateActiveButton = (activeButton) => {
         // Önce hepsinden 'active' class'ını kaldır
         filtersContainer.querySelectorAll('.filter-btn').forEach(btn => {
@@ -107,7 +125,28 @@ document.addEventListener('DOMContentLoaded', () => {
         activeButton.classList.add('active');
     };
 
-    // --- Başlat ---
+    // --- 4. YENİ: ARAMA İÇİN EVENT LISTENER'LAR ---
+    const performSearch = () => {
+        currentSearchTerm = searchInput.value.trim();
+        fetchArchivedPosts(); // API'yi yeni arama terimiyle çağır
+    };
+    
+    searchButton.addEventListener('click', performSearch);
+    
+    // Enter tuşuyla da arama yapsın
+    searchInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') {
+            performSearch();
+        }
+    });
+
+    clearSearchButton.addEventListener('click', () => {
+        searchInput.value = '';
+        currentSearchTerm = '';
+        fetchArchivedPosts(); // Aramayı temizleyip yeniden yükle
+    });
+
+    // --- 5. Başlat ---
     fetchCategories();      // Önce filtreleri yükle
-    fetchArchivedPosts();   // Sonra tüm arşivi yükle
+    fetchArchivedPosts();   // Sonra tüm arşivi yükle (boş filtrelerle)
 });

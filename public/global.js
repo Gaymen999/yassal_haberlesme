@@ -1,3 +1,5 @@
+// public/global.js
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Sadece header'daki linkleri seç
     const authLinks = document.getElementById('auth-links');
@@ -25,11 +27,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <a href="#" id="logout-link">Çıkış Yap</a>
             `;
             
-            // Çıkış yap butonuna event listener ekle
+            // Çıkış yap butonuna event listener ekle (GÜNCELLENDİ)
             document.getElementById('logout-link').addEventListener('click', async (e) => {
                 e.preventDefault();
                 await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
-                window.location.href = '/login.html';
+                // DEĞİŞTİ: login.html yerine ana sayfaya yönlendir
+                window.location.href = '/index.html';
             });
 
             // --- YENİ: Admin Sayfası Koruması ---

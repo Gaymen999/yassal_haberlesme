@@ -1,22 +1,22 @@
+// routes/authRoutes.js
+
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/db'); // DB bağlantısını config'den al
+const { pool } = require('../config/db'); 
 const router = express.Router();
 
 // --- KULLANICI ROTALARI ---
 
-// DEĞİŞTİ: /register rotası artık 'username' alıyor
+// ( /register rotası aynı kalabilir )
 router.post('/register', async (req, res) => {
     try {
-        // YENİ: 'username' body'den alındı
         const { username, email, password } = req.body;
         
         if (!username || !email || !password) {
             return res.status(400).json({ message: 'Kullanıcı adı, email ve şifre zorunludur.' });
         }
 
-        // YENİ: Hem e-posta hem de kullanıcı adı daha önce alınmış mı diye kontrol et
         const userExists = await pool.query(
             'SELECT * FROM users WHERE email = $1 OR username = $2', 
             [email, username]
@@ -34,13 +34,12 @@ router.post('/register', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
         
-        // YENİ: 'username' veritabanına ekleniyor
         const newUser = await pool.query(
           'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id, username, email, role',
           [username, email, hashedPassword]
         );
         
-        res.status(201).json({ message: 'Kullanıcı oluşturuldu.', user: newUser.rows[0] });
+        res.status(201).json({ message: 'Kayıt oluşturuldu.', user: newUser.rows[0] });
     
     } catch (err) {
         console.error(err.message);
@@ -48,16 +47,15 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// DEĞİŞTİ: /login rotası artık 'username' VEYA 'email' ile çalışıyor
+
+// DEĞİŞTİ: /login rotası
 router.post('/login', async (req, res) => {
     try {
-        // 'email' alanı artık 'loginField' gibi davranacak
         const { email, password } = req.body; 
 
-        // YENİ: Kullanıcıyı hem username hem email ile ara
         const user = await pool.query(
             'SELECT * FROM users WHERE email = $1 OR username = $1', 
-            [email] // (frontend hala 'email' input'undan gönderiyor)
+            [email] 
         );
 
         if (user.rows.length === 0) {
@@ -69,11 +67,10 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ message: 'Hatalı giriş.' });
         }
         
-        // Token oluştururken artık username'i de ekleyelim
         const tokenPayload = {
             id: user.rows[0].id, 
             role: user.rows[0].role,
-            username: user.rows[0].username // YENİ
+            username: user.rows[0].username 
         };
 
         const token = jwt.sign(
@@ -85,7 +82,8 @@ router.post('/login', async (req, res) => {
         res.cookie('authToken', token, {
             httpOnly: true, 
             secure: process.env.NODE_ENV === 'production', 
-            maxAge: 3600000 
+            maxAge: 3600000,
+            path: '/' // <<< YENİ: Çerezi tüm site için ayarla
         });
 
         res.json({ message: "Giriş başarılı." });
@@ -95,13 +93,14 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// /logout rotası (Aynı kaldı)
+// DEĞİŞTİ: /logout rotası
 router.post('/logout', (req, res) => {
-    res.clearCookie('authToken'); 
+    // YENİ: Çerezi silerken de path belirt
+    res.clearCookie('authToken', { path: '/' }); 
     res.status(200).json({ message: 'Çıkış başarılı.' });
 });
 
-// /api/user-status rotası (Aynı kaldı)
+// ( /api/user-status rotası aynı kalabilir )
 router.get('/api/user-status', (req, res) => {
     const token = req.cookies.authToken;
     if (!token) {
@@ -112,7 +111,6 @@ router.get('/api/user-status', (req, res) => {
         if (err) {
             return res.json({ loggedIn: false });
         }
-        // Token'a username'i eklediğimiz için o da dönecek
         res.json({ loggedIn: true, user: user }); 
     });
 });

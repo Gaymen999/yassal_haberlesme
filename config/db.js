@@ -1,3 +1,5 @@
+// config/db.js
+
 const { Pool } = require('pg');
 
 const pool = new Pool({
@@ -37,11 +39,7 @@ const createTables = async () => {
       title VARCHAR(255) NOT NULL,
       content TEXT NOT NULL,
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      
-      -- DEĞİŞTİ: Kategori tekrar zorunlu hale geldi (NOT NULL)
-      -- Kategori silinirse, o kategorideki postlar da silinir (CASCADE)
       category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-      
       is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
       is_locked BOOLEAN DEFAULT FALSE NOT NULL,
       best_reply_id INTEGER NULL, 
@@ -49,14 +47,13 @@ const createTables = async () => {
     );
   `;
 
-  // ... (Diğer tablolar aynı: replies, thread_reactions, reply_reactions) ...
   const repliesTableQuery = `
     CREATE TABLE IF NOT EXISTS replies (
       id SERIAL PRIMARY KEY,
       content TEXT NOT NULL,
       thread_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      created_at TIMESTAMTOASTZ DEFAULT NOW()
     );
   `;
   const threadReactionsTableQuery = `
@@ -88,18 +85,24 @@ const createTables = async () => {
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
 
-    // YENİ: Varsayılan kategorileri ekle (eğer yoksa)
-    const categoriesCheck = await pool.query('SELECT * FROM categories');
-    if (categoriesCheck.rows.length === 0) {
-        console.log('Varsayılan kategoriler ekleniyor...');
-        await pool.query(`
-            INSERT INTO categories (name, description, slug) VALUES
-            ('9. Sınıf', '9. Sınıf duyuruları ve tartışmaları.', '9-sinif'),
-            ('10. Sınıf', '10. Sınıf duyuruları ve tartışmaları.', '10-sinif'),
-            ('11. Sınıf', '11. Sınıf duyuruları ve tartışmaları.', '11-sinif'),
-            ('12. Sınıf', '12. Sınıf duyuruları ve tartışmaları.', '12-sinif');
-        `);
-    }
+    // --- DEĞİŞTİ: Kategori Ekleme Bloğu ---
+    // 'if (categoriesCheck.rows.length === 0)' bloğu yerine
+    // 'ON CONFLICT (slug) DO NOTHING' kullanıyoruz.
+    // Bu sayede sunucu her başladığında eksik kategoriler eklenir.
+    console.log('Varsayılan kategoriler kontrol ediliyor/ekleniyor...');
+    const insertCategoriesQuery = `
+        INSERT INTO categories (name, description, slug) VALUES
+        ('9. Sınıf', '9. Sınıf duyuruları ve tartışmaları.', '9-sinif'),
+        ('10. Sınıf', '10. Sınıf duyuruları ve tartışmaları.', '10-sinif'),
+        ('11. Sınıf', '11. Sınıf duyuruları ve tartışmaları.', '11-sinif'),
+        ('12. Sınıf', '12. Sınıf duyuruları ve tartışmaları.', '12-sinif'),
+        ('Hocalar Hakkında Bilgilendirme', 'Hocalarla ilgili genel bilgilendirmeler.', 'hocalar-hakkinda-bilgilendirme'),
+        ('Ders Notu', 'Paylaşılan ders notları ve kaynaklar.', 'ders-notu')
+        ON CONFLICT (slug) DO NOTHING; 
+    `;
+    await pool.query(insertCategoriesQuery);
+    console.log('Kategori kontrolü tamamlandı.');
+    // --- DEĞİŞİKLİK BİTTİ ---
 
   } catch (err) {
     console.error("Tablolar oluşturulurken hata:", err);
