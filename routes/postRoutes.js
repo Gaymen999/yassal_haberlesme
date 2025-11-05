@@ -5,6 +5,7 @@ const { pool } = require('../config/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 const jwt = require('jsonwebtoken'); // Kendi kendine token doğrulaması için
+const { sendApprovalEmail } = require('../config/email');
 
 // Sabitler
 const POSTS_PER_PAGE = 20; 
@@ -143,6 +144,77 @@ router.post('/posts', authenticateToken, async (req, res) => {
         } finally {
             client.release();
         }
+
+    } catch (err) {
+        console.error("Konu oluştururken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu Hatası: Konu oluşturulamadı.' });
+    }
+});
+
+router.post('/posts', authenticateToken, async (req, res) => {
+    try {
+        const { title, content, category_id } = req.body;
+        const author_id = req.user.id;
+        const author_role = req.user.role;
+        const author_username = req.user.username; // Token'dan alıyoruz
+
+        if (!title || !content || !category_id) {
+            return res.status(400).json({ message: 'Başlık, içerik ve kategori zorunludur.' });
+        }
+        
+        if (author_role !== 'admin') {
+            const categoryCheck = await pool.query('SELECT slug FROM categories WHERE id = $1', [category_id]);
+            if (categoryCheck.rows.length === 0) {
+                return res.status(400).json({ message: 'Geçersiz kategori.' });
+            }
+            if (categoryCheck.rows[0].slug === 'bilgilendirme') {
+                return res.status(403).json({ message: 'Bu kategoriye sadece adminler konu açabilir.' });
+            }
+        }
+        
+        const status = (author_role === 'admin') ? 'approved' : 'pending';
+        
+        const client = await pool.connect();
+        let newPostData; // Mail için post verisini tut
+        try {
+            await client.query('BEGIN');
+            
+            const newPost = await client.query(
+                'INSERT INTO posts (title, content, author_id, category_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+                [title, content, author_id, category_id, status]
+            );
+            newPostData = newPost.rows[0]; // Veriyi değişkene ata
+            
+            await client.query(
+                'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
+                [author_id]
+            );
+            
+            await client.query('COMMIT');
+
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+        
+        // YENİ: Post onaya düştüyse mail gönder
+        if (status === 'pending') {
+            // Hata olursa bile akışı bozmuyoruz (await yok)
+            sendApprovalEmail(newPostData, author_username)
+                .catch(emailError => console.error("Mail gönderme işlemi arka planda hata verdi:", emailError));
+        }
+
+        const message = (status === 'approved') 
+            ? 'Konu başarıyla oluşturuldu.' 
+            : 'Konunuz onaya gönderildi. Admin tarafından incelenecektir.';
+
+        res.status(201).json({ 
+            message: message, 
+            post: newPostData,
+            status: status
+        });
 
     } catch (err) {
         console.error("Konu oluştururken hata:", err.message);
