@@ -806,16 +806,42 @@ header.scrolled {
 }
 
 
-/* --- Header'daki Linkler (Sol Üst Tuşlar) --- */
 header nav a,
 #auth-links a {
     padding: 8px 14px;
     border-radius: 6px;
     text-decoration: none;
     font-weight: bold;
-    background-color: transparent;
-    border: 1px solid transparent; /* Yer kaplaması için */
+    
+    /* DEĞİŞTİ: Artık şeffaf değil */
+    background-color: #f8f9fa; /* Çok çok hafif gri zemin */
+    border: 1px solid #dee2e6; /* Hafif gri border */
+    color: #343a40; /* Daha tok bir siyah/gri */
+
     transition: all 0.2s ease-in-out; /* Animasyon [3]'ten gelen */
+}
+
+/* Header linklerine hover efekti (Burası aynı, sadece teyit et) */
+header nav a:hover,
+#auth-links a:hover {
+    background-color: #e9ecef; /* Hafif gri (Zaten böyleydi) */
+    border-color: #dee2e6;
+    color: #0056b3; 
+    transform: translateY(-1px); 
+}
+
+/* "Yeni Konu Aç" butonu zaten renkli, onun hover'ını bozma (Aynı) */
+.new-post-btn:hover {
+    background-color: #004170; 
+    border-color: transparent;
+    color: white;
+}
+
+/* Admin Paneli linkini de güzelleştir (Aynı) */
+#auth-links a[href="admin.html"]:hover {
+    background-color: #fffbef;
+    border-color: #b08a00;
+    color: #b08a00;
 }
 
 /* Header linklerine hover efekti (Arka plan ekle) */

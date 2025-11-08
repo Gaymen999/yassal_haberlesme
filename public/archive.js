@@ -34,7 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 1. Kategorileri Çek ve Filtre Butonlarını Oluştur ---
     const fetchCategories = async () => {
         try {
-            const response = await fetch('/api/categories');
+            // YENİ: Kimlik bilgisi eklendi
+            const response = await fetch('/api/categories', { credentials: 'include' }); // <<< DÜZELTME
             if (!response.ok) throw new Error('Kategoriler yüklenemedi.');
             
             const categories = await response.json();
