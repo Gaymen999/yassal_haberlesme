@@ -1,3 +1,5 @@
+// public/script.js (YENİ HALİ - Animasyon 1 Eklendi)
+
 document.addEventListener('DOMContentLoaded', async () => { 
     // --- 1. ELEMENTLERİ SEÇ ---
     const postsContainer = document.getElementById('posts-container');
@@ -6,9 +8,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 2. DURUM DEĞİŞKENLERİ ---
     let isAdmin = false;
     let isLoggedIn = false; 
+    
+    // --- YENİ: KAYDIRMA ANİMASYONU İÇİN OBSERVER ---
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.remove('hidden');
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target); // Animasyon 1 kez çalışsın
+            }
+        });
+    }, { threshold: 0.1 }); // %10'u görünürse animasyon başlasın
+    
+    const observeNewPosts = () => {
+        postsContainer.querySelectorAll('.post-card.hidden').forEach(card => {
+            observer.observe(card);
+        });
+    };
+    // ------------------------------------------------
 
-    // --- 3. FONKSİYON TANIMLAMALARI (HATANIN ÇÖZÜMÜ) ---
-    // BU FONKSİYONLAR, ÇAĞRILMADAN ÖNCE TANIMLANMALIDIR
+    // --- 3. FONKSİYON TANIMLAMALARI ---
 
     // "Yeni Konu Aç" butonunu çizer
     const renderNewPostButton = () => {
@@ -22,93 +41,83 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Konuları çeker ve listeler
     const fetchPosts = async () => {
         try {
+            // GET istekleri secureFetch GEREKTİRMEZ
             const res = await fetch('/api/posts/recent', { credentials: 'include' });
             if (!res.ok) throw new Error('Konular yüklenemedi.');
             
             const posts = await res.json();
-            postsContainer.innerHTML = ''; // "Yükleniyor..." yazısını temizle
-
+            postsContainer.innerHTML = ''; // "Yükleniyor..." yazısını sil
+            
             if (posts.length === 0) {
-                postsContainer.innerHTML = '<p>Gösterilecek konu bulunamadı.</p>';
+                postsContainer.innerHTML = `<p class="no-posts">Henüz onaylanmış bir konu bulunmamaktadır.</p>`;
                 return;
             }
 
-            posts.forEach(post => {
+            posts.forEach((post, index) => {
                 const postElement = document.createElement('div');
-                postElement.className = 'post-card';
+                // post-card sınıfının yanına "hidden" sınıfını ekle
+                postElement.classList.add('post-card', 'hidden'); 
+
                 if (post.is_pinned) {
                     postElement.classList.add('pinned');
                 }
-                
+
                 const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
-                    year: 'numeric', month: 'long', day: 'numeric'
+                    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
                 });
                 
-                // Güvenli (XSS korumalı) HTML oluştur
                 const safeTitle = DOMPurify.sanitize(post.title);
                 const safeCategoryName = DOMPurify.sanitize(post.category_name);
                 const safeAuthorUsername = DOMPurify.sanitize(post.author_username);
-                const categorySlug = DOMPurify.sanitize(post.category_slug);
-
-                // Admin butonları (Sadece adminse ve konu kilitli değilse göster)
+                
                 let adminControls = '';
-                if (isAdmin && !post.is_locked) {
+                if (isAdmin) {
+                    const pinText = post.is_pinned ? 'SABİTLEMEĞİ KALDIR' : 'KONUYU SABİTLE';
                     adminControls = `
                         <div class="admin-card-controls">
-                            <button class="admin-pin-btn" 
-                                data-id="${post.id}" 
-                                data-is-pinned="${post.is_pinned}">
-                                ${post.is_pinned ? 'Sabitlemeyi Kaldır' : 'Sabitle'}
+                            <button class="admin-pin-btn pin-toggle-btn" data-id="${post.id}" data-pinned="${post.is_pinned}">
+                                ${pinText}
                             </button>
                         </div>
                     `;
                 }
-                
+
                 postElement.innerHTML = `
                     <div class="post-header">
                         <h3><a href="/thread.html?id=${post.id}">${safeTitle}</a></h3>
-                        <a href="/category.html?slug=${categorySlug}" class="category-tag">${safeCategoryName}</a>
+                        <span class="category-tag"><a href="/category.html?slug=${post.category_slug}">${safeCategoryName}</a></span>
                     </div>
-                    <div class="post-footer">
-                         <p class="post-meta">
-                            Yayınlayan: <a href="/profile.html?username=${encodeURIComponent(safeAuthorUsername)}">${safeAuthorUsername}</a> (${date})
-                         </p>
-                         <div class="post-stats">
-                            <span>${post.reply_count || 0} Cevap</span>
-                            <span>${post.like_count || 0} Beğeni</span>
-                        </div>
+                    <div class="post-meta">
+                        <p>Yayınlayan: <a href="profile.html?username=${safeAuthorUsername}">${safeAuthorUsername}</a> (${date})</p>
+                    </div>
+                    <div class="post-stats">
+                        <span>Cevap: ${post.reply_count || 0}</span>
+                        <span>Beğeni: ${post.like_count || 0}</span>
                     </div>
                     ${adminControls}
                 `;
                 postsContainer.appendChild(postElement);
             });
+            
+            // YENİ: Postları DOM'a ekledikten sonra gözlemlemeye başla
+            observeNewPosts(); 
 
         } catch (error) {
-            console.error('Konu yükleme hatası:', error);
-            postsContainer.innerHTML = `<p style="color: red;">Konular yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.</p>`;
+            console.error(error);
+            postsContainer.innerHTML = `<p style="color: red;">Konular yüklenirken hata oluştu.</p>`;
         }
     };
-    
-    // Admin sabitleme/kaldırma işlemleri
-    const handleAdminActions = async (e) => {
-        if (!e.target.classList.contains('admin-pin-btn')) return;
-        if (!isAdmin) return; 
+
+    // Konu sabitleme/kaldırma (Admin için)
+    const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
+        const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
+        if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
         
-        const btn = e.target;
-        const postId = btn.dataset.id;
-        const isCurrentlyPinned = btn.dataset.isPinned === 'true';
-        const actionText = isCurrentlyPinned ? 'sabitlemesini kaldırmak' : 'sabitlemek';
-
-        if (!confirm(`Bu konuyu ${actionText} istediğinize emin misiniz?`)) return;
-
         try {
-            // DİKKAT: Ana sayfada sadece pin/unpin (sabitleme) işlemi yapıyoruz.
-            // Bu yüzden adminRoutes.js'deki PUT /admin/posts/:id rotasını kullanıyoruz.
-            const response = await fetch(`/admin/posts/${postId}`, {
+            // secureFetch kullanır
+            const response = await window.secureFetch(`/admin/posts/${postId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
-                credentials: 'include'
+                body: { is_pinned: !isCurrentlyPinned }
             });
 
             if (response.ok) {
@@ -123,10 +132,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert('Sunucuya bağlanılamadı.');
         }
     };
-
+    
     // --- 4. KODU BAŞLAT ---
     
-    // (Önce kullanıcı durumunu kontrol et)
     try {
         const response = await fetch('/api/user-status', {
             credentials: 'include' 
@@ -140,18 +148,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         
-        // Artık fonksiyonlar tanımlı olduğu için burası çalışacak
         renderNewPostButton(); 
+        fetchPosts(); 
 
     } catch (error) {
         console.warn('Kullanıcı durumu kontrol edilemedi.');
-        // Hata olsa bile buton (giriş yap) çizilmeli
         renderNewPostButton();
+        fetchPosts(); 
     }
+    
+    // Admin Sabitleme butonu için dinleyici (delegate et)
+    postsContainer.addEventListener('click', (e) => {
+        if (e.target.classList.contains('pin-toggle-btn')) {
+            const btn = e.target;
+            updatePostPinStatus(btn.dataset.id, btn.dataset.pinned === 'true');
+        }
+    });
 
-    // (Sonra konuları çek)
-    await fetchPosts();
-
-    // (Event listener'ı en son ekle)
-    postsContainer.addEventListener('click', handleAdminActions);
 });

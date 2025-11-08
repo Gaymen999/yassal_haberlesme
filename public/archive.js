@@ -1,4 +1,4 @@
-// archive.js (TÜM DOSYA)
+// public/archive.js (YENİ HALİ - Animasyon 1 Eklendi)
 
 document.addEventListener('DOMContentLoaded', () => {
     const archiveContainer = document.getElementById('archive-container');
@@ -11,7 +11,25 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Aktif filtreleri tutmak için
     let currentCategoryId = null;
-    let currentSearchTerm = ''; // YENİ
+    let currentSearchTerm = '';
+    
+    // --- YENİ: KAYDIRMA ANİMASYONU İÇİN OBSERVER ---
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.remove('hidden');
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target); // Animasyon 1 kez çalışsın
+            }
+        });
+    }, { threshold: 0.1 }); 
+
+    const observeNewPosts = () => {
+        archiveContainer.querySelectorAll('.post-card.hidden').forEach(card => {
+            observer.observe(card);
+        });
+    };
+    // ------------------------------------------------
 
     // --- 1. Kategorileri Çek ve Filtre Butonlarını Oluştur ---
     const fetchCategories = async () => {
@@ -47,53 +65,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error(error);
-            filtersContainer.innerHTML = '<p style="color:red">Filtreler yüklenemedi.</p>';
+            filtersContainer.innerHTML = `<p style="color: red;">Filtreler yüklenirken hata oluştu.</p>`;
         }
     };
 
-    // --- 2. Arşiv Postlarını Çek ve Render Et (GÜNCELLENDİ) ---
+    // --- 2. Postları Çek ve Ekrana Bas ---
     const fetchArchivedPosts = async () => {
-        archiveContainer.innerHTML = '<p>Arşiv yükleniyor...</p>';
-        
-        // URL'i dinamik olarak oluştur
-        const params = new URLSearchParams();
-        if (currentCategoryId) {
-            params.append('categoryId', currentCategoryId);
-        }
-        if (currentSearchTerm) { // YENİ
-            params.append('q', currentSearchTerm);
-        }
-
-        // '?' sadece parametre varsa eklenir
-        const queryString = params.toString();
-        let apiUrl = '/api/archive';
-        if (queryString) {
-            apiUrl += `?${queryString}`;
-        }
-        
         try {
-            const response = await fetch(apiUrl, { credentials: 'include' });
-            if (!response.ok) throw new Error('Arşiv yüklenirken bir hata oluştu: ' + response.statusText);
-
-            const posts = await response.json();
-            archiveContainer.innerHTML = ''; 
-
-            if (posts.length === 0) {
-                archiveContainer.innerHTML = '<p>Bu kriterlere uyan arşivlenmiş konu bulunmamaktadır.</p>';
-                return;
+            archiveContainer.innerHTML = '<p>Arşiv yükleniyor...</p>'; // Yükleniyor mesajını göster
+            
+            // API sorgusunu categoryId ve arama terimi ile oluştur
+            const url = new URL('/api/posts/archive', window.location.origin);
+            if (currentCategoryId) {
+                url.searchParams.append('categoryId', currentCategoryId);
+            }
+            if (currentSearchTerm) {
+                url.searchParams.append('search', currentSearchTerm);
             }
 
-            // (Render kısmı (forEach) aynı, değişmedi)
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Arşiv konuları yüklenemedi.');
+            
+            const posts = await response.json();
+
+            archiveContainer.innerHTML = ''; // Yükleniyor mesajını sil
+            
+            if (posts.length === 0) {
+                 archiveContainer.innerHTML = `<p class="no-posts">Filtrenize uygun konu bulunmamaktadır.</p>`;
+                 return;
+            }
+
             posts.forEach(post => {
                 const postElement = document.createElement('div');
-                postElement.classList.add('post-card'); 
+                // post-card sınıfının yanına "hidden" sınıfını ekle
+                postElement.classList.add('post-card', 'hidden'); 
 
                 const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
                     year: 'numeric', month: 'long', day: 'numeric'
                 });
                 
                 const safeTitle = DOMPurify.sanitize(post.title);
-                const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
+                const safeAuthorUsername = DOMPurify.sanitize(post.author_username || 'Bilinmiyor');
                 const safeCategoryName = DOMPurify.sanitize(post.category_name || 'Kategorisiz');
 
                 postElement.innerHTML = `
@@ -107,6 +119,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 archiveContainer.appendChild(postElement);
             });
+            
+            // YENİ: Postları DOM'a ekledikten sonra gözlemlemeye başla
+            observeNewPosts();
 
         } catch (error) {
             console.error(error);
@@ -115,17 +130,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- 3. Yardımcı Fonksiyon (Aktif butonu güncelle) ---
-    // (Bu fonksiyon aynı, değişmedi)
     const updateActiveButton = (activeButton) => {
-        // Önce hepsinden 'active' class'ını kaldır
         filtersContainer.querySelectorAll('.filter-btn').forEach(btn => {
             btn.classList.remove('active');
         });
-        // Sadece tıklanana ekle
         activeButton.classList.add('active');
     };
 
-    // --- 4. YENİ: ARAMA İÇİN EVENT LISTENER'LAR ---
+    // --- 4. ARAMA İÇİN EVENT LISTENER'LAR ---
     const performSearch = () => {
         currentSearchTerm = searchInput.value.trim();
         fetchArchivedPosts(); // API'yi yeni arama terimiyle çağır
@@ -146,7 +158,9 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchArchivedPosts(); // Aramayı temizleyip yeniden yükle
     });
 
-    // --- 5. Başlat ---
+
+    // --- Başlat ---
     fetchCategories();      // Önce filtreleri yükle
-    fetchArchivedPosts();   // Sonra tüm arşivi yükle (boş filtrelerle)
+    fetchArchivedPosts();   // Ardından tüm postları yükle
+
 });

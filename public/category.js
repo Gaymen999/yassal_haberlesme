@@ -1,3 +1,5 @@
+// public/category.js (YENİ HALİ - Animasyon 1 Eklendi)
+
 document.addEventListener('DOMContentLoaded', () => {
     const postsContainer = document.getElementById('posts-container');
     const categoryTitleElement = document.getElementById('category-title');
@@ -5,6 +7,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     const slug = params.get('slug'); // URL'den ?slug=... değerini al
 
+    // --- YENİ: KAYDIRMA ANİMASYONU İÇİN OBSERVER ---
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.remove('hidden');
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target); // Animasyon 1 kez çalışsın
+            }
+        });
+    }, { threshold: 0.1 }); 
+
+    const observeNewPosts = () => {
+        postsContainer.querySelectorAll('.post-card.hidden').forEach(card => {
+            observer.observe(card);
+        });
+    };
+    // ------------------------------------------------
+    
     if (!slug) {
         categoryTitleElement.textContent = 'Kategori Bulunamadı';
         postsContainer.innerHTML = '<p>Geçerli bir kategori seçmediniz. <a href="index.html">Ana sayfaya dönmek için tıklayın</a>.</p>';
@@ -13,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchCategoryPosts = async () => {
         try {
-            // Backend'deki /api/categories/:slug rotasını çağır
             const response = await fetch(`/api/categories/${slug}`);
             
             if (!response.ok) {
@@ -29,21 +48,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const posts = await response.json();
             
             if (posts.length === 0) {
-                categoryTitleElement.textContent = 'Kategori Bulunamadı';
+                categoryTitleElement.textContent = posts.length > 0 ? DOMPurify.sanitize(posts[0].category_name) : 'Kategori';
                 postsContainer.innerHTML = `<p>Bu kategoriye ait konu bulunamadı.</p>`;
                 return;
             }
-
-            // Kategori başlığını ilk posttan al
-            const categoryName = posts[0].category_name;
-            categoryTitleElement.textContent = `${DOMPurify.sanitize(categoryName)} Kategorisindeki Konular`;
-
-            postsContainer.innerHTML = ''; 
+            
+            categoryTitleElement.textContent = DOMPurify.sanitize(posts[0].category_name);
+            postsContainer.innerHTML = ''; // Önceki yükleniyor mesajını sil
 
             posts.forEach(post => {
                 const postElement = document.createElement('div');
-                postElement.classList.add('post-card'); 
-                if (post.is_pinned) postElement.classList.add('pinned');
+                // post-card sınıfının yanına "hidden" sınıfını ekle
+                postElement.classList.add('post-card', 'hidden'); 
+                
+                if (post.is_pinned) {
+                    postElement.classList.add('pinned');
+                }
 
                 const date = new Date(post.created_at).toLocaleDateString('tr-TR', {
                     year: 'numeric', month: 'long', day: 'numeric'
@@ -51,10 +71,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const safeTitle = DOMPurify.sanitize(post.title);
                 const safeAuthorUsername = DOMPurify.sanitize(post.author_username); 
-                
-                // Not: Bu API rotası (routes/postRoutes.js -> /api/categories/:slug)
-                // cevap (reply_count) veya beğeni (like_count) sayılarını getirmiyor.
-                // Bu yüzden kartlar ana sayfadakinden biraz daha sade görünecek.
                 
                 postElement.innerHTML = `
                     <div class="post-header">
@@ -67,6 +83,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 postsContainer.appendChild(postElement);
             });
+            
+            // YENİ: Postları DOM'a ekledikten sonra gözlemlemeye başla
+            observeNewPosts(); 
 
         } catch (error) {
             console.error(error);
