@@ -294,6 +294,51 @@ router.get('/api/archive', async (req, res) => {
     }
 });
 
+router.get('/api/posts/archive', async (req, res) => {
+    try {
+        // 1. URL'den parametreleri al (?category=...&search=...)
+        const { category, search } = req.query;
+
+        // 2. Temel SQL sorgusu (Sadece onaylıları getir)
+        let queryText = `
+            SELECT 
+                p.id, p.title, p.created_at, 
+                c.name AS category_name,
+                c.id AS category_id,
+                u.username AS author_username
+            FROM posts p
+            JOIN users u ON p.author_id = u.id
+            JOIN categories c ON p.category_id = c.id
+            WHERE p.status = 'approved'
+        `;
+        
+        const queryParams = [];
+
+        // 3. Arama filtresi (search) varsa, sorguya ekle
+        if (search) {
+            queryParams.push(`%${search}%`);
+            queryText += ` AND p.title ILIKE $${queryParams.length}`;
+        }
+
+        // 4. Kategori filtresi (category) varsa (ID'ye göre), sorguya ekle
+        if (category) {
+            queryParams.push(category);
+            queryText += ` AND c.id = $${queryParams.length}`;
+        }
+        
+        // 5. Sıralama
+        queryText += ' ORDER BY p.created_at DESC';
+
+        // 6. Sorguyu çalıştır
+        const posts = await pool.query(queryText, queryParams);
+        
+        res.status(200).json(posts.rows);
+
+    } catch (err) {
+        console.error("Arşiv getirilirken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu Hatası: Arşiv yüklenemedi.' });
+    }
+});
 
 // --- KONU (THREAD) DETAY SAYFASI (GÜNCELLENDİ) ---
 // (Onaylanmamış postları sadece admin/sahibi görebilir)
