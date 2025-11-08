@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fetchCategories = async () => {
         try {
             // YENİ: Kimlik bilgisi eklendi
-            const response = await fetch('/api/categories', { credentials: 'include' }); // <<< DÜZELTME
+            const response = await fetch('/api/categories', { credentials: 'include' });
             if (!response.ok) throw new Error('Kategoriler yüklenemedi.');
             
             const categories = await response.json();
@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 url.searchParams.append('search', currentSearchTerm);
             }
 
-            const response = await fetch(url, { credentials: 'include' });
+            const response = await fetch('/api/categories', { credentials: 'include' });
             if (!response.ok) throw new Error('Arşiv konuları yüklenemedi.');
             
             const posts = await response.json();
