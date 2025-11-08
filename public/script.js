@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 let adminControls = '';
                 if (isAdmin) {
-                    const pinText = post.is_pinned ? 'SABİTLEMEĞİ KALDIR' : 'KONUYU SABİTLE';
+                    const pinText = post.is_pinned ? 'SABİTLEMEYİ KALDIR' : 'KONUYU SABİTLE';
                     adminControls = `
                         <div class="admin-card-controls">
                             <button class="admin-pin-btn pin-toggle-btn" data-id="${post.id}" data-pinned="${post.is_pinned}">

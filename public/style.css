@@ -767,3 +767,76 @@ header.scrolled {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Hafif gölge */
     backdrop-filter: blur(5px); /* Arkaplanı hafif bulanıklaştır */
 }
+/* ========================================= */
+/* === [4] YENİ BUTON STİLLERİ === */
+/* ========================================= */
+
+/* --- Ana Eylem Butonları (Giriş, Konu Gönder, Yeni Konu Aç) --- */
+.submit-btn,
+.new-post-btn {
+    padding: 12px 20px;
+    font-size: 1em;
+    font-weight: bold;
+    color: white;
+    background-image: linear-gradient(to bottom, #007bff, #0056b3); /* Hafif gradyan */
+    border: none;
+    border-radius: 8px; /* Daha yuvarlak kenarlar */
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    border-bottom: 3px solid #004085; /* Alttan gölge hissi */
+    
+    /* Zaten eklediğimiz geçişler (animasyonlar) */
+    transition: all 0.2s ease-in-out;
+}
+
+.submit-btn:hover,
+.new-post-btn:hover {
+    background-image: linear-gradient(to bottom, #0088ff, #0062c9);
+    transform: translateY(-3px); /* Hover'da daha belirgin */
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2); /* Daha belirgin gölge */
+    border-bottom-color: #0056b3;
+}
+
+/* Tıklandığında içeri göçme efekti */
+.submit-btn:active,
+.new-post-btn:active {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+
+/* --- Header'daki Linkler (Sol Üst Tuşlar) --- */
+header nav a,
+#auth-links a {
+    padding: 8px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: bold;
+    background-color: transparent;
+    border: 1px solid transparent; /* Yer kaplaması için */
+    transition: all 0.2s ease-in-out; /* Animasyon [3]'ten gelen */
+}
+
+/* Header linklerine hover efekti (Arka plan ekle) */
+header nav a:hover,
+#auth-links a:hover {
+    background-color: #e9ecef; /* Çok hafif gri */
+    border-color: #dee2e6; /* Hafif border */
+    color: #0056b3; /* Renk değişimi */
+    transform: translateY(-1px); /* Animasyon [3]'ten gelen */
+}
+
+/* "Yeni Konu Aç" butonu zaten renkli, onun hover'ını bozma */
+.new-post-btn:hover {
+    background-color: #004170; /* Eski (mavi) hover'ına geri dön */
+    border-color: transparent;
+    color: white;
+}
+
+/* Admin Paneli linkini de güzelleştir */
+#auth-links a[href="admin.html"]:hover {
+    background-color: #fffbef;
+    border-color: #b08a00;
+    color: #b08a00;
+}

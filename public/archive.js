@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 url.searchParams.append('search', currentSearchTerm);
             }
 
-            const response = await fetch(url);
+            const response = await fetch(url, { credentials: 'include' });
             if (!response.ok) throw new Error('Arşiv konuları yüklenemedi.');
             
             const posts = await response.json();

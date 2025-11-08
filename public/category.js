@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchCategoryPosts = async () => {
         try {
-            const response = await fetch(`/api/categories/${slug}`);
+            const response = await fetch(`/api/categories/${slug}`, { credentials: 'include' });
             
             if (!response.ok) {
                 if (response.status === 404) {
