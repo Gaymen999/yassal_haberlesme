@@ -17,7 +17,7 @@ const REPLIES_PER_PAGE = 20;
 // (Arşiv, Kategori sayfaları vb. için)
 router.get('/api/categories', async (req, res) => { 
     try {
-        const categories = await pool.query('SELECT * FROM categories ORDER BY name ASC');
+        const categories = await pool.query('SELECT * FROM categories ORDER BY id ASC');
         res.json(categories.rows);
     } catch (err) {
         console.error("Kategorileri getirirken hata:", err.message);
