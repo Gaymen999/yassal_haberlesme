@@ -3,13 +3,26 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/db'); 
+const { pool } = require('../config/db');
+const rateLimit = require('express-rate-limit'); 
 const router = express.Router();
 
 // --- KULLANICI ROTALARI ---
 
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 dakika
+    max: 15, 
+    message: { message: 'Çok fazla giriş denemesi. Lütfen 15 dakika sonra tekrar deneyin.' }
+});
+
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 saat
+    max: 10,
+    message: { message: 'Bu IP adresinden çok fazla hesap oluşturuldu.' }
+});
+
 // ( /register rotası aynı kalabilir )
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
     try {
         const { username, email, password } = req.body;
         
@@ -49,7 +62,7 @@ router.post('/register', async (req, res) => {
 
 
 // DEĞİŞTİ: /login rotası
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { email, password } = req.body; 
 

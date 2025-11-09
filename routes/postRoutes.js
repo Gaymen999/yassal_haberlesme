@@ -6,6 +6,10 @@ const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 const jwt = require('jsonwebtoken'); // Kendi kendine token doğrulaması için
 const { sendApprovalEmail } = require('../config/email');
+const createDOMPurify = require('dompurify');
+const { JSDOM } = require('jsdom');
+const window = new JSDOM('').window;
+const DOMPurify = createDOMPurify(window);
 
 // Sabitler
 const POSTS_PER_PAGE = 20; 
@@ -89,6 +93,7 @@ router.get('/api/categories/:slug', async (req, res) => {
 router.post('/posts', authenticateToken, async (req, res) => {
     try {
         const { title, content, category_id } = req.body;
+        const cleanContent = DOMPurify.sanitize(content);
         const author_id = req.user.id;
         const author_role = req.user.role; 
 
@@ -344,6 +349,7 @@ router.get('/api/posts/archive', async (req, res) => {
 // (Onaylanmamış postları sadece admin/sahibi görebilir)
 router.get('/api/threads/:id', async (req, res) => {
     const { id } = req.params;
+
     const page = parseInt(req.query.page) || 1;
     const offset = (page - 1) * REPLIES_PER_PAGE;
     
@@ -475,18 +481,23 @@ router.get('/api/threads/:id', async (req, res) => {
     }
 });
 
-// --- KONUYA CEVAP VERME (Değişmedi) ---
+// --- KONUYA CEVAP VERME (GÜVENLİ HALE GETİRİLDİ) ---
 router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
     const { id: threadId } = req.params;
     const { content } = req.body;
     const authorId = req.user.id;
 
-    if (!content) {
+    // 1. Backend XSS Koruması: İçeriği temizle
+    const cleanContent = DOMPurify.sanitize(content);
+
+    // 2. Boş içerik kontrolünü temizlenmiş veri üzerinden yap
+    // (Kullanıcı <script></script> gibi boş ama zararlı etiketler göndermesin)
+    if (!cleanContent || cleanContent.trim() === '' || cleanContent === '<p><br></p>') {
         return res.status(400).json({ message: 'Cevap içeriği boş olamaz.' });
     }
 
     try {
-        // Konu kilitli mi VEYA onaylı mı diye kontrol et (onaylı değilse de cevap yazılabilir)
+        // Konu kilitli mi diye kontrol et
         const threadCheck = await pool.query('SELECT is_locked, best_reply_id, status FROM posts WHERE id = $1', [threadId]);
         if (threadCheck.rows.length === 0) {
             return res.status(404).json({ message: 'Konu bulunamadı.' });
@@ -500,14 +511,15 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
         try {
             await client.query('BEGIN');
             
-            // 1. Cevabı ekle
+            // 3. Cevabı Ekle (XSS DÜZELTMESİ)
+            // Veritabanına 'content' yerine 'cleanContent' kaydediliyor
             const newReply = await client.query(
                 'INSERT INTO replies (content, thread_id, author_id) VALUES ($1, $2, $3) RETURNING id',
-                [content, threadId, authorId]
+                [cleanContent, threadId, authorId] // Düzeltildi
             );
             newReplyId = newReply.rows[0].id;
             
-            // 2. Kullanıcının post sayısını güncelle
+            // 4. Kullanıcının post sayısını güncelle
             await client.query(
                 'UPDATE users SET post_count = post_count + 1 WHERE id = $1',
                 [authorId]
@@ -515,15 +527,26 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
             
             await client.query('COMMIT');
             
-            // 3. Kullanıcıyı yönlendirmek için son sayfa numarasını hesapla
+            // 5. Son sayfa numarasını hesapla (SQL INJECTION DÜZELTMESİ)
             const bestReplyId = threadCheck.rows[0].best_reply_id;
-            const totalRepliesQuery = `
+            
+            // Sorguyu parametreli hale getir
+            const queryParams = [threadId]; // $1 = threadId
+            let totalRepliesQuery = `
                 SELECT COUNT(*) FROM replies 
-                WHERE thread_id = $1 
-                ${bestReplyId ? `AND id != ${bestReplyId}` : ''}
+                WHERE thread_id = $1
             `;
-            const totalRepliesResult = await pool.query(totalRepliesQuery, [threadId]);
+            
+            if (bestReplyId) {
+                queryParams.push(bestReplyId); // $2 = bestReplyId
+                totalRepliesQuery += ` AND id != $${queryParams.length}`; // "AND id != $2"
+            }
+            
+            // Sorguyu güvenli parametrelerle çalıştır
+            const totalRepliesResult = await pool.query(totalRepliesQuery, queryParams);
             const totalReplies = parseInt(totalRepliesResult.rows[0].count, 10);
+            
+            // REPLIES_PER_PAGE sabitinin dosyanın üstünde tanımlı olduğundan emin ol
             const lastPage = Math.ceil(totalReplies / REPLIES_PER_PAGE);
 
             res.status(201).json({ 
@@ -534,7 +557,7 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
 
         } catch (err) {
             await client.query('ROLLBACK');
-            throw err;
+            throw err; // Hata ana 'catch' bloğuna gitsin
         } finally {
             client.release();
         }
@@ -546,27 +569,40 @@ router.post('/api/threads/:id/reply', authenticateToken, async (req, res) => {
 });
 
 
-// --- KULLANICI PROFİL ROTASI (GÜNCELLENDİ) ---
-// (Reddedilen ve Onay Bekleyen postları da çekecek)
+// --- KULLANICI PROFİL ROTASI (GÜVENLİ HALE GETİRİLDİ) ---
 router.get('/api/profile/:username', async (req, res) => {
     try {
         const { username } = req.params;
 
-        // 1. Kullanıcı bilgilerini çek
-        const userQuery = pool.query(
+        // --- 1. GİRİŞ YAPAN KULLANICIYI AL (YENİ) ---
+        // Token'ı doğrula ve isteği yapanın ID'sini al
+        let currentUserId = null;
+        if (req.cookies.authToken) {
+            try {
+                // Token'ı doğrula (JWT_SECRET'ınız process.env'de olmalı)
+                const user = jwt.verify(req.cookies.authToken, process.env.JWT_SECRET);
+                currentUserId = user.id; // Giriş yapan kullanıcının ID'si
+            } catch (err) {
+                // Token geçersizse veya süresi dolmuşsa misafir olarak devam et
+            }
+        }
+
+        // --- 2. PROFİL KULLANICI BİLGİLERİNİ ÇEK (MEVCUT) ---
+        const userResult = await pool.query(
             'SELECT id, username, avatar_url, title, post_count, created_at FROM users WHERE username = $1',
             [username]
         );
-        const userResult = await userQuery;
 
         if (userResult.rows.length === 0) {
             return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
         }
+        
         const user = userResult.rows[0];
-        const userId = user.id;
+        const profileUserId = user.id; // Bu, bakılan profilin ID'si
 
-        // 2. Kullanıcının son aktivitelerini (cevaplarını) çek
-        // (Sadece 'approved' konulardaki cevaplar)
+        // --- 3. SORGULARI HAZIRLA ---
+
+        // A. Herkesin görebileceği sorgu (Onaylı Aktiviteler)
         const recentRepliesQuery = pool.query(`
             SELECT 
                 r.id AS reply_id, 
@@ -579,36 +615,46 @@ router.get('/api/profile/:username', async (req, res) => {
             WHERE r.author_id = $1 AND p.status = 'approved'
             ORDER BY r.created_at DESC
             LIMIT 15;
-        `, [userId]);
+        `, [profileUserId]); // DÜZELTME: Tanımsız 'userId' yerine 'profileUserId' kullanıldı
         
-        // 3. YENİ: Kullanıcının reddedilen postlarını çek
-        const rejectedPostsQuery = pool.query(`
-            SELECT id, title, status FROM posts 
-            WHERE author_id = $1 AND status = 'rejected'
-            ORDER BY created_at DESC
-            LIMIT 5;
-        `, [userId]);
+        // B. Gizli sorgular için varsayılan boş sonuçları hazırla
+        let rejectedPostsQuery = Promise.resolve({ rows: [] }); 
+        let pendingPostsQuery = Promise.resolve({ rows: [] });
 
-        // 4. YENİ: Kullanıcının onay bekleyen postlarını çek
-        const pendingPostsQuery = pool.query(`
-            SELECT id, title, status FROM posts
-            WHERE author_id = $1 AND status = 'pending'
-            ORDER BY created_at DESC
-            LIMIT 5;
-        `, [userId]);
+        // --- 4. ERİŞİM KONTROLÜ (YENİ) ---
+        // Sadece giriş yapan kullanıcı, baktığı profilin sahibiyse
+        // reddedilen ve bekleyen postları sorgula.
+        if (currentUserId && currentUserId === profileUserId) {
+            
+            rejectedPostsQuery = pool.query(`
+                SELECT id, title, status FROM posts 
+                WHERE author_id = $1 AND status = 'rejected'
+                ORDER BY created_at DESC
+                LIMIT 5;
+            `, [profileUserId]); // DÜZELTME: Tanımsız 'userId' yerine 'profileUserId' kullanıldı
 
-        // Tüm sorguların bitmesini bekle
+            pendingPostsQuery = pool.query(`
+                SELECT id, title, status FROM posts
+                WHERE author_id = $1 AND status = 'pending'
+                ORDER BY created_at DESC
+                LIMIT 5;
+            `, [profileUserId]); // DÜZELTME: Tanımsız 'userId' yerine 'profileUserId' kullanıldı
+        }
+
+        // --- 5. TÜM SORGULARI ÇALIŞTIR ---
+        // Sorgular ya dolu (eğer yetkisi varsa) ya da boş (varsayılan) olarak çalışacak
         const [repliesResult, rejectedPostsResult, pendingPostsResult] = await Promise.all([
             recentRepliesQuery,
             rejectedPostsQuery,
             pendingPostsQuery
         ]);
 
+        // --- 6. GÜVENLİ YANITI GÖNDER ---
         res.json({
             user: user,
             recentActivity: repliesResult.rows,
-            rejectedPosts: rejectedPostsResult.rows, // YENİ
-            pendingPosts: pendingPostsResult.rows   // YENİ
+            rejectedPosts: rejectedPostsResult.rows, // Artık güvenli
+            pendingPosts: pendingPostsResult.rows    // Artık güvenli
         });
 
     } catch (err) {
