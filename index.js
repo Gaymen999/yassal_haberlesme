@@ -49,19 +49,5 @@ const initializeApp = async () => {
     }
 };
 
-const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 dakika
-    max: 15, // Her IP için 15 istek
-    message: { message: 'Çok fazla giriş denemesi. Lütfen 15 dakika sonra tekrar deneyin.' },
-    standardHeaders: true, // Geri sayım bilgilerini header'a ekler
-    legacyHeaders: false, 
-});
-
-const registerLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 saat
-    max: 10, 
-    message: { message: 'Bu IP adresinden çok fazla hesap oluşturuldu, lütfen 1 saat sonra deneyin.' },
-});
-
 // Uygulamayı başlat
 initializeApp();

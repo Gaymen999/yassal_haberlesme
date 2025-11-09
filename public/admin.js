@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fetchApprovedPosts = async () => {
         try {
             approvedLoading.style.display = 'block';
-            const response = await fetch('/api/archive', { credentials: 'include' });
+            const response = await fetch('//api/posts/archive', { credentials: 'include' });
             if (!response.ok) throw new Error('Onaylı konular çekilemedi.');
             
             const posts = await response.json();
