@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/Gaymen999/yassal_haberlesme#readme",
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
