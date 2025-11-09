@@ -104,17 +104,23 @@ router.get("/api/categories/:slug", async (req, res) => {
 
 router.post("/posts", authenticateToken, async (req, res) => {
   try {
-    const { title, content, category_id } = req.body;
+    const { title, content, category_id } = req.body; // <-- content buradan geliyor (HENÜZ TEMİZ DEĞİL)
     const author_id = req.user.id;
     const author_role = req.user.role;
     const author_username = req.user.username; // Token'dan alıyoruz
 
-    if (!title || !content || !category_id) {
+    // --- YENİ: XSS KORUMASI ---
+    // Gelen 'content'i veritabanına kaydetmeden ÖNCE temizle
+    const cleanContent = DOMPurify.sanitize(content);
+
+    // 1. Kontrolü 'cleanContent' üzerinden yap
+    if (!title || !cleanContent || cleanContent.trim() === '' || cleanContent === '<p><br></p>' || !category_id) {
       return res
         .status(400)
         .json({ message: "Başlık, içerik ve kategori zorunludur." });
     }
-
+    
+    // --- (Kategori güvenlik kontrolü aynı kalıyor) ---
     if (author_role !== "admin") {
       const categoryCheck = await pool.query(
         "SELECT slug FROM categories WHERE id = $1",
@@ -137,9 +143,10 @@ router.post("/posts", authenticateToken, async (req, res) => {
     try {
       await client.query("BEGIN");
 
+      // --- KRİTİK DEĞİŞİKLİK: 'content' yerine 'cleanContent' kaydediliyor ---
       const newPost = await client.query(
         "INSERT INTO posts (title, content, author_id, category_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-        [title, content, author_id, category_id, status]
+        [title, cleanContent, author_id, category_id, status] // $2 GÜNCELLENDİ
       );
       newPostData = newPost.rows[0]; // Veriyi değişkene ata
 
@@ -151,12 +158,12 @@ router.post("/posts", authenticateToken, async (req, res) => {
       await client.query("COMMIT");
     } catch (err) {
       await client.query("ROLLBACK");
-      throw err;
+      throw err; // Hata ana catch bloğuna gitsin
     } finally {
       client.release();
     }
 
-    // YENİ: Post onaya düştüyse mail gönder
+    // --- (Mail gönderme ve res.json kısmı aynı) ---
     if (status === "pending") {
       // Hata olursa bile akışı bozmuyoruz (await yok)
       sendApprovalEmail(newPostData, author_username).catch((emailError) =>
@@ -166,7 +173,7 @@ router.post("/posts", authenticateToken, async (req, res) => {
         )
       );
     }
-
+    
     const message =
       status === "approved"
         ? "Konu başarıyla oluşturuldu."
