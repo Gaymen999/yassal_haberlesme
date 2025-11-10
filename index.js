@@ -29,7 +29,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // --- ROTA YÖNLENDİRMELERİ ---
 app.use('/', authRoutes);     
 app.use('/', postRoutes);   
-app.use('/admin', adminRoutes); 
+app.use('/api/admin', adminRoutes); 
 // YENİ: Reaksiyon rotalarını /api öneki ile kullan
 app.use('/api', reactionRoutes); 
 
