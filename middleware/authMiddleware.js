@@ -21,6 +21,15 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+exports.isAdmin = (req, res, next) => {
+    // ... admin kontrol mantığı ...
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Yönetici yetkisi gerekli.' });
+    }
+};
+
 // index.js'den authorizeAdmin fonksiyonunu buraya taşıdık
 const authorizeAdmin = (req, res, next) => {
     // Bu kısım zaten doğruydu (JSON yolluyordu), aynı kalıyor
