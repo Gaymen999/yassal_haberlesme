@@ -199,5 +199,33 @@ router.delete('/replies/:id', [authenticateToken, authorizeAdmin], async (req, r
         res.status(500).json({ message: 'Sunucu hatası: Cevap silinemedi.' });
     }
 });
+// YENİ ROTA: Tüm kullanıcıları listelemek için
+// Bu rota 'isAdmin' middleware'i ile korunmalı
+router.get('/users', isAdmin, async (req, res) => {
+    try {
+        // ASLA password_hash gönderme! Sadece gereken bilgileri seç.
+        const sqlQuery = `
+            SELECT 
+                id, 
+                username, 
+                email, 
+                role, 
+                created_at 
+            FROM 
+                users 
+            ORDER BY 
+                username ASC;
+        `;
+        
+        const { rows } = await pool.query(sqlQuery);
+        
+        // Kullanıcı listesini JSON olarak gönder
+        res.json(rows);
+
+    } catch (error) {
+        console.error('Tüm kullanıcılar çekilirken hata oluştu:', error);
+        res.status(500).json({ message: 'Sunucu hatası' });
+    }
+});
 
 module.exports = router;

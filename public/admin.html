@@ -26,6 +26,11 @@
              border-bottom: 2px solid #ccc;
              padding-bottom: 5px;
         }
+        /* YENİ EKLENEN STİL */
+        #user-list-container h3 {
+             border-bottom: 2px solid #00AADC; /* Mavi */
+             padding-bottom: 5px;
+        }
     </style>
 </head>
 <body data-auth="admin"> 
@@ -50,7 +55,11 @@
             <p id="approved-loading-message">Onaylanmış konular yükleniyor...</p>
             </div>
 
-    </main>
+        <div id="user-list-container" class="posts-container" style="margin-top: 40px;">
+            <h3>Kayıtlı Kullanıcılar</h3>
+            <p id="user-loading-message">Kullanıcılar yükleniyor...</p>
+            </div>
+        </main>
     
     <footer>
         <div style="max-width: 900px; margin: 0 auto; padding: 20px 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.9em; color: #666;">
