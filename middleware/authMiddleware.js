@@ -4,7 +4,6 @@ const jwt = require('jsonwebtoken');
 
 // index.js'den authenticateToken fonksiyonunu buraya taşıdık
 const authenticateToken = (req, res, next) => {
-    // ... (authenticateToken fonksiyonunun içeriği aynı)
     const token = req.cookies.authToken; 
     
     // DEĞİŞTİ: res.sendStatus(401) yerine JSON yolla
@@ -22,15 +21,6 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-const isAdmin = (req, res, next) => { // ARTIK 'exports.' YOK, SADECE CONST
-    // ... admin kontrol mantığı ...
-    if (req.user && req.user.role === 'admin') {
-        next();
-    } else {
-        res.status(403).json({ message: 'Yönetici yetkisi gerekli.' });
-    }
-};
-
 // index.js'den authorizeAdmin fonksiyonunu buraya taşıdık
 const authorizeAdmin = (req, res, next) => {
     // Bu kısım zaten doğruydu (JSON yolluyordu), aynı kalıyor
@@ -40,9 +30,8 @@ const authorizeAdmin = (req, res, next) => {
     next();
 };
 
-// Üç fonksiyonu da export et
+// İki fonksiyonu de export et
 module.exports = {
     authenticateToken,
-    authorizeAdmin,
-    isAdmin // <<< İŞTE BU EKLENMELİYDİ!
+    authorizeAdmin
 };

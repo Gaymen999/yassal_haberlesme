@@ -1,4 +1,44 @@
-// public/global.js (TEMİZLENMİŞ VE DOĞRU HALİ)
+// public/global.js
+// BU KODU global.js DOSYANIN EN ÜSTÜNE YAPIŞTIR
+
+function secureFetch(url, options = {}) {
+  // 1. Token'ı localStorage'dan al
+  // (Token'ı 'token' adıyla kaydettiğini varsayıyorum)
+  const token = localStorage.getItem('token');
+
+  // 2. Varsayılan header'ları ayarla
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+  };
+
+  // 3. Token varsa, Authorization header'ını ekle
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
+
+  // 4. Fonksiyona gelen options ile varsayılanı birleştir
+  const fetchOptions = {
+    ...options, // method (PUT, POST vb.) ve body buradan gelir
+    headers: {
+      ...defaultHeaders,
+      ...options.headers, // Gelen spesifik header'lar varsayılanı ezebilir
+    },
+  };
+
+  // 5. Body'yi JSON'a çevir (eğer bir obje ise)
+  // script.js'de body: { is_pinned: ... } şeklinde yollamışsın
+  if (fetchOptions.body && typeof fetchOptions.body === 'object') {
+    fetchOptions.body = JSON.stringify(fetchOptions.body);
+  }
+
+  // 6. Gerçek fetch'i çağır ve promise'i döndür
+  return fetch(url, fetchOptions);
+}
+
+// MEVCUT KODUN BURADAN BAŞLIYOR...
+document.addEventListener("DOMContentLoaded", async () => {
+  // ... (Geri kalan kodun aynen kalacak)
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
   // Sadece header'daki linkleri seç
