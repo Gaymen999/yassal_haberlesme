@@ -108,30 +108,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    // Konu sabitleme/kaldırma (Admin için)
-    const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
-        const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
-        if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
-        
-        try {
-            // secureFetch kullanır
-            const response = await window.secureFetch(`/admin/posts/${postId}`, {
-                method: 'PUT',
-                body: { is_pinned: !isCurrentlyPinned }
-            });
+const updatePostPinStatus = async (postId, isCurrentlyPinned) => {
+    const actionText = isCurrentlyPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle';
+    if (!confirm(`Bu konuyu ${actionText}mak istediğinize emin misiniz?`)) return;
+    
+    try {
+        // HATA BURADAYDI: 'window.secureFetch' YANLIŞ.
+        // Doğrusu 'fetch' ve 'credentials: include' kullanmak.
+        const response = await fetch(`/api/admin/posts/${postId}`, { // ROTA DA GÜNCELLENDİ
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_pinned: !isCurrentlyPinned }),
+            credentials: 'include' // <<< ÇÖZÜM BU!
+        });
 
-            if (response.ok) {
-                alert(`Konu başarıyla ${isCurrentlyPinned ? 'sabitlemesi kaldırıldı' : 'sabitlendi'}.`);
-                fetchPosts(); // Listeyi yenile
-            } else {
-                const data = await response.json();
-                alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
-            }
-        } catch (error) {
-            console.error('Sabitleme hatası:', error);
-            alert('Sunucuya bağlanılamadı.');
+        if (response.ok) {
+            alert(`Konu başarıyla ${isCurrentlyPinned ? 'sabitlemesi kaldırıldı' : 'sabitlendi'}.`);
+            fetchPosts(); // Listeyi yenile
+        } else {
+            const data = await response.json();
+            alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
         }
-    };
+    } catch (error) {
+        console.error('Sabitleme hatası:', error);
+        alert('Sunucuya bağlanılamadı.');
+    }
+};
     
     // --- 4. KODU BAŞLAT ---
     

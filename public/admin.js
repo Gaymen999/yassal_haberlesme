@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // ... (Bu fonksiyonun tamamı SİZİN KODUNUZLA AYNI)
         try {
             pendingLoading.style.display = 'block';
-            const response = await fetch('/admin/posts/pending', { credentials: 'include' });
+            const response = await fetch('api/admin/posts/pending', { credentials: 'include' });
             if (!response.ok) throw new Error('Onay bekleyenler çekilemedi.');
             
             const posts = await response.json();
@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             approvedLoading.style.display = 'block';
             // NOT: Buradaki fetch URL'ini senin kodundaki gibi bıraktım
-            const response = await fetch('https://yassal-haberlesme.onrender.com/api/posts/archive', { credentials: 'include' });
+            const response = await fetch('/api/posts/archive', { credentials: 'include' });
             if (!response.ok) throw new Error('Onaylı konular çekilemedi.');
             
             const posts = await response.json();

@@ -2,9 +2,8 @@
 
 const express = require('express');
 const { pool } = require('../config/db');
-const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware');
+const { authenticateToken, authorizeAdmin, isAdmin } = require('../middleware/authMiddleware');
 const router = express.Router();
-const { isAdmin } = require('../middleware/authMiddleware');
 
 // --- MODERASYON ROTALARI ---
 

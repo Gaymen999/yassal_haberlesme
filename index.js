@@ -27,10 +27,9 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public'))); 
 
 // --- ROTA YÖNLENDİRMELERİ ---
-app.use('/', authRoutes);     
-app.use('/', postRoutes);   
-app.use('/api/admin', adminRoutes); 
-// YENİ: Reaksiyon rotalarını /api öneki ile kullan
+app.use('/api', authRoutes);     // (login, register'ı etkilemez, /api/user-status'u düzeltir)
+app.use('/api', postRoutes);     // (Artık /api/posts/recent, /api/categories/:slug)
+app.use('/api/admin', adminRoutes); // (Artık /api/admin/posts/pending, /api/admin/users)
 app.use('/api', reactionRoutes); 
 
 // --- SUNUCUYU BAŞLATMA FONKSİYONU ---
