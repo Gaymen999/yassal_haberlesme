@@ -26,6 +26,31 @@
              border-bottom: 2px solid #ccc;
              padding-bottom: 5px;
         }
+        main {
+            display: flex;
+            gap: 20px;
+        }
+        #main-content {
+            flex: 3;
+        }
+        #users-container {
+            flex: 1;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        #users-container h3 {
+            margin-top: 0;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+        .user-card {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .user-card:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 <body data-auth="admin"> 
@@ -38,18 +63,24 @@
     </header>
 
     <main>
-        
-        <div id="pending-posts-container" class="posts-container" style="margin-bottom: 40px;">
-            <h3>Onay Bekleyen Konular</h3>
-            <p id="pending-loading-message">Onay bekleyen konular yükleniyor...</p>
+        <div id="main-content">
+            <div id="pending-posts-container" class="posts-container" style="margin-bottom: 40px;">
+                <h3>Onay Bekleyen Konular</h3>
+                <p id="pending-loading-message">Onay bekleyen konular yükleniyor...</p>
             </div>
 
-
-        <div id="posts-management-container" class="posts-container">
-            <h3>Onaylanmış Konuları Yönet (Sabitle / Sil)</h3>
-            <p id="approved-loading-message">Onaylanmış konular yükleniyor...</p>
+            <div id="posts-management-container" class="posts-container">
+                <h3>Onaylanmış Konuları Yönet (Sabitle / Sil)</h3>
+                <p id="approved-loading-message">Onaylanmış konular yükleniyor...</p>
             </div>
+        </div>
 
+        <aside id="users-container">
+            <h3>Kayıtlı Kullanıcılar</h3>
+            <div id="users-list">
+                <p id="users-loading-message">Kullanıcılar yükleniyor...</p>
+            </div>
+        </aside>
     </main>
     
     <footer>
