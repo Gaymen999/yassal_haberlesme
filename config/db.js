@@ -77,6 +77,18 @@ const createTables = async () => {
     );
   `;
 
+  const notificationsTableQuery = `
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type VARCHAR(50) NOT NULL,
+      source_id INTEGER, -- ID of the reply, post, etc.
+      message TEXT NOT NULL,
+      is_read BOOLEAN DEFAULT FALSE NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
+
   try {
     // 1. Standart tabloları oluştur/kontrol et
     await pool.query(usersTableQuery);
@@ -85,6 +97,7 @@ const createTables = async () => {
     await pool.query(repliesTableQuery); 
     await pool.query(threadReactionsTableQuery);
     await pool.query(replyReactionsTableQuery);
+    await pool.query(notificationsTableQuery);
     
     console.log("Tablolar başarıyla kontrol edildi/oluşturuldu.");
 

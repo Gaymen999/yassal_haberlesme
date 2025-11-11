@@ -508,6 +508,26 @@ router.post("/api/threads/:id/reply", authenticateToken, async (req, res) => {
       // REPLIES_PER_PAGE sabitinin dosyanın üstünde tanımlı olduğundan emin ol
       const lastPage = Math.ceil(totalReplies / REPLIES_PER_PAGE);
 
+      // YENİ: Konu sahibine bildirim gönder (eğer cevaplayan kişi konu sahibi değilse)
+      const threadAuthorResult = await client.query(
+        "SELECT author_id, title FROM posts WHERE id = $1",
+        [threadId]
+      );
+      const threadAuthorId = threadAuthorResult.rows[0].author_id;
+      const threadTitle = threadAuthorResult.rows[0].title;
+
+      if (threadAuthorId !== authorId) {
+        await client.query(
+          "INSERT INTO notifications (user_id, type, source_id, message) VALUES ($1, $2, $3, $4)",
+          [
+            threadAuthorId,
+            "new_reply",
+            newReplyId,
+            `Konunuz "${threadTitle}" için yeni bir cevap var.`,
+          ]
+        );
+      }
+
       res.status(201).json({
         message: "Cevap başarıyla eklendi.",
         replyId: newReplyId,

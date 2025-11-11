@@ -11,6 +11,8 @@ const postRoutes = require('./routes/postRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 // YENİ: Reaksiyon rotalarını import et
 const reactionRoutes = require('./routes/reactionRoutes');
+// YENİ: Bildirim rotalarını import et
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +34,8 @@ app.use('/', postRoutes);
 app.use('/admin', adminRoutes); 
 // YENİ: Reaksiyon rotalarını /api öneki ile kullan
 app.use('/api', reactionRoutes); 
+// YENİ: Bildirim rotalarını /api öneki ile kullan
+app.use('/api', notificationRoutes); 
 
 // --- SUNUCUYU BAŞLATMA FONKSİYONU ---
 const initializeApp = async () => {
