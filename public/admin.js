@@ -217,4 +217,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4. Başlat
     fetchPendingPosts();
     fetchApprovedPosts();
+    fetchUsers();
 });
+
+// --- YENİ FONKSİYON ---
+
+// Kullanıcıları Çek ve Görüntüle
+const fetchUsers = async () => {
+    const usersList = document.getElementById('users-list');
+    const usersLoading = document.getElementById('users-loading-message');
+
+    try {
+        usersLoading.style.display = 'block';
+        const response = await fetch('/admin/users', { credentials: 'include' });
+        if (!response.ok) throw new Error('Kullanıcılar çekilemedi.');
+
+        const users = await response.json();
+        usersLoading.style.display = 'none';
+
+        usersList.innerHTML = ''; // Listeyi temizle
+
+        if (users.length === 0) {
+            usersList.innerHTML = '<p>Kayıtlı kullanıcı bulunmamaktadır.</p>';
+            return;
+        }
+
+        users.forEach(user => {
+            const userElement = document.createElement('div');
+            userElement.className = 'user-card';
+
+            const safeUsername = DOMPurify.sanitize(user.username);
+            const safeEmail = DOMPurify.sanitize(user.email);
+            const postCount = user.post_count || 0;
+
+            userElement.innerHTML = `
+                <strong>${safeUsername}</strong>
+                <p style="font-size: 0.9em; color: #666; margin: 4px 0 0;">
+                    ${safeEmail} | ${postCount} gönderi
+                </p>
+            `;
+            usersList.appendChild(userElement);
+        });
+
+    } catch (error) {
+        console.error('Kullanıcıları yükleme hatası:', error);
+        usersLoading.style.display = 'none';
+        usersList.innerHTML = '<p style="color: red;">Kullanıcılar yüklenirken bir hata oluştu.</p>';
+    }
+};

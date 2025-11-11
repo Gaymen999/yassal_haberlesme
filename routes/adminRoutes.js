@@ -200,4 +200,18 @@ router.delete('/replies/:id', [authenticateToken, authorizeAdmin], async (req, r
     }
 });
 
+// --- KULLANICI YÖNETİMİ ---
+
+// Tüm kullanıcıları listele
+router.get('/users', [authenticateToken, authorizeAdmin], async (req, res) => {
+    try {
+        const users = await pool.query('SELECT id, username, email, created_at, post_count FROM users ORDER BY created_at DESC');
+        res.status(200).json(users.rows);
+    } catch (err) {
+        console.error("Kullanıcılar getirilirken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu hatası.' });
+    }
+});
+
+
 module.exports = router;
