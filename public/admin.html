@@ -26,6 +26,58 @@
              border-bottom: 2px solid #ccc;
              padding-bottom: 5px;
         }
+        main {
+            display: flex;
+            gap: 20px;
+        }
+        #main-content {
+            flex: 3;
+        }
+        #users-container {
+            flex: 1;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        #users-container h3 {
+            margin-top: 0;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+        .user-card {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .user-card:last-child {
+            border-bottom: none;
+        }
+        /* İstatistik Kartları Stilleri */
+        #stats-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            flex: 1;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            min-width: 150px;
+        }
+        .stat-card h4 {
+            margin: 0 0 10px 0;
+            font-size: 1em;
+            color: #555;
+        }
+        .stat-card p {
+            margin: 0;
+            font-size: 2em;
+            font-weight: bold;
+            color: #005A9C;
+        }
     </style>
 </head>
 <body data-auth="admin"> 
@@ -38,18 +90,49 @@
     </header>
 
     <main>
-        
-        <div id="pending-posts-container" class="posts-container" style="margin-bottom: 40px;">
-            <h3>Onay Bekleyen Konular</h3>
-            <p id="pending-loading-message">Onay bekleyen konular yükleniyor...</p>
+        <div id="main-content">
+
+            <!-- İstatistik Paneli -->
+            <div id="stats-container">
+                <div class="stat-card">
+                    <h4>Toplam Kullanıcı</h4>
+                    <p id="stat-total-users">...</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Yeni Kullanıcı (24s)</h4>
+                    <p id="stat-new-users">...</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Onay Bekleyen</h4>
+                    <p id="stat-pending-posts">...</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Toplam Konu</h4>
+                    <p id="stat-total-posts">...</p>
+                </div>
+                 <div class="stat-card">
+                    <h4>Toplam Cevap</h4>
+                    <p id="stat-total-replies">...</p>
+                </div>
             </div>
 
-
-        <div id="posts-management-container" class="posts-container">
-            <h3>Onaylanmış Konuları Yönet (Sabitle / Sil)</h3>
-            <p id="approved-loading-message">Onaylanmış konular yükleniyor...</p>
+            <div id="pending-posts-container" class="posts-container" style="margin-bottom: 40px;">
+                <h3>Onay Bekleyen Konular</h3>
+                <p id="pending-loading-message">Onay bekleyen konular yükleniyor...</p>
             </div>
 
+            <div id="posts-management-container" class="posts-container">
+                <h3>Onaylanmış Konuları Yönet (Sabitle / Sil)</h3>
+                <p id="approved-loading-message">Onaylanmış konular yükleniyor...</p>
+            </div>
+        </div>
+
+        <aside id="users-container">
+            <h3>Kayıtlı Kullanıcılar</h3>
+            <div id="users-list">
+                <p id="users-loading-message">Kullanıcılar yükleniyor...</p>
+            </div>
+        </aside>
     </main>
     
     <footer>

@@ -217,4 +217,171 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4. Başlat
     fetchPendingPosts();
     fetchApprovedPosts();
+    fetchUsers();
+    fetchStats();
 });
+
+// --- İSTATİSTİK FONKSİYONU ---
+const fetchStats = async () => {
+    try {
+        const response = await fetch('/admin/stats', { credentials: 'include' });
+        if (!response.ok) throw new Error('İstatistikler çekilemedi.');
+
+        const stats = await response.json();
+
+        document.getElementById('stat-total-users').textContent = stats.totalUsers;
+        document.getElementById('stat-new-users').textContent = stats.newUsersToday;
+        document.getElementById('stat-pending-posts').textContent = stats.pendingPosts;
+        document.getElementById('stat-total-posts').textContent = stats.approvedPosts;
+        document.getElementById('stat-total-replies').textContent = stats.totalReplies;
+
+    } catch (error) {
+        console.error('İstatistik yükleme hatası:', error);
+        // Hata durumunda kartlarda "Hata" yazdır
+        document.querySelectorAll('.stat-card p').forEach(p => {
+            p.textContent = 'Hata';
+            p.style.color = '#d9534f';
+        });
+    }
+};
+
+// --- YENİ FONKSİYON ---
+
+// Kullanıcıları Çek ve Görüntüle
+const fetchUsers = async () => {
+    const usersList = document.getElementById('users-list');
+    const usersLoading = document.getElementById('users-loading-message');
+
+    try {
+        usersLoading.style.display = 'block';
+        const response = await fetch('/admin/users', { credentials: 'include' });
+        if (!response.ok) throw new Error('Kullanıcılar çekilemedi.');
+
+        const users = await response.json();
+        usersLoading.style.display = 'none';
+        usersList.innerHTML = ''; 
+
+        if (users.length === 0) {
+            usersList.innerHTML = '<p>Kayıtlı kullanıcı bulunmamaktadır.</p>';
+            return;
+        }
+
+        users.forEach(user => {
+            const userElement = document.createElement('div');
+            userElement.className = 'user-card';
+
+            const safeUsername = DOMPurify.sanitize(user.username);
+            const safeEmail = DOMPurify.sanitize(user.email);
+            const postCount = user.post_count || 0;
+            const status = user.status || 'active';
+
+            let statusText, statusColor;
+            switch (status) {
+                case 'suspended':
+                    statusText = 'Askıda';
+                    statusColor = '#f0ad4e'; // Turuncu
+                    break;
+                case 'banned':
+                    statusText = 'Yasaklı';
+                    statusColor = '#d9534f'; // Kırmızı
+                    break;
+                default:
+                    statusText = 'Aktif';
+                    statusColor = '#5cb85c'; // Yeşil
+            }
+
+            userElement.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <strong>${safeUsername}</strong>
+                        <p style="font-size: 0.9em; color: #666; margin: 4px 0 0;">
+                            ${safeEmail} | ${postCount} gönderi
+                        </p>
+                    </div>
+                    <strong style="color: ${statusColor}; font-size: 0.9em;">${statusText}</strong>
+                </div>
+                <div class="user-controls" style="margin-top: 10px; display: flex; gap: 5px;"></div>
+            `;
+            
+            const controlsContainer = userElement.querySelector('.user-controls');
+            if (status === 'active') {
+                const suspendBtn = document.createElement('button');
+                suspendBtn.textContent = 'Askıya Al';
+                suspendBtn.className = 'admin-btn user-action-btn';
+                suspendBtn.onclick = () => updateUserStatus(user.id, safeUsername, 'suspended');
+                controlsContainer.appendChild(suspendBtn);
+
+                const banBtn = document.createElement('button');
+                banBtn.textContent = 'Yasakla';
+                banBtn.className = 'admin-btn user-action-btn reject'; // Kırmızı stil
+                banBtn.onclick = () => updateUserStatus(user.id, safeUsername, 'banned');
+                controlsContainer.appendChild(banBtn);
+            } else if (status === 'suspended') {
+                const activateBtn = document.createElement('button');
+                activateBtn.textContent = 'Aktif Et';
+                activateBtn.className = 'admin-btn user-action-btn';
+                activateBtn.onclick = () => updateUserStatus(user.id, safeUsername, 'active');
+                controlsContainer.appendChild(activateBtn);
+            }
+            // Yasaklı kullanıcılar için bir işlem butonu eklenmemiştir.
+
+            usersList.appendChild(userElement);
+        });
+
+        // Buton stilleri
+        document.querySelectorAll('.user-action-btn').forEach(btn => {
+            btn.style.padding = '3px 8px';
+            btn.style.fontSize = '0.8em';
+            btn.style.cursor = 'pointer';
+            if (!btn.classList.contains('reject')) {
+                 btn.style.backgroundColor = '#007bff';
+                 btn.style.color = 'white';
+                 btn.style.border = '1px solid #007bff';
+            }
+        });
+
+
+    } catch (error) {
+        console.error('Kullanıcıları yükleme hatası:', error);
+        usersLoading.style.display = 'none';
+        usersList.innerHTML = '<p style="color: red;">Kullanıcılar yüklenirken bir hata oluştu.</p>';
+    }
+};
+
+// Kullanıcı Durumunu Güncelle
+const updateUserStatus = async (userId, username, newStatus) => {
+    let actionText = '';
+    switch (newStatus) {
+        case 'suspended':
+            actionText = 'askıya almak';
+            break;
+        case 'banned':
+            actionText = 'yasaklamak';
+            break;
+        case 'active':
+            actionText = 'aktif etmek';
+            break;
+    }
+
+    if (!confirm(`"${username}" adlı kullanıcıyı ${actionText} istediğinize emin misiniz?`)) return;
+
+    try {
+        const response = await fetch(`/admin/users/${userId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', },
+            body: JSON.stringify({ status: newStatus }),
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            alert('Kullanıcı durumu başarıyla güncellendi!');
+            fetchUsers(); // Listeyi yenile
+        } else {
+            const data = await response.json();
+            alert(`İşlem başarısız: ${data.message || 'Sunucu hatası.'}`);
+        }
+    } catch (error) {
+        console.error('Kullanıcı durumu güncelleme hatası:', error);
+        alert('Sunucuya bağlanılamadı.');
+    }
+};

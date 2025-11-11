@@ -5,6 +5,39 @@ const { pool } = require('../config/db');
 const { authenticateToken, authorizeAdmin } = require('../middleware/authMiddleware');
 const router = express.Router();
 
+// --- DASHBOARD İSTATİSTİKLERİ ---
+router.get('/stats', [authenticateToken, authorizeAdmin], async (req, res) => {
+    try {
+        // Paralel olarak birden fazla sorgu çalıştır
+        const [
+            totalUsers,
+            newUsersToday,
+            approvedPosts,
+            pendingPosts,
+            totalReplies
+        ] = await Promise.all([
+            pool.query("SELECT COUNT(*) FROM users"),
+            pool.query("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '24 hours'"),
+            pool.query("SELECT COUNT(*) FROM posts WHERE status = 'approved'"),
+            pool.query("SELECT COUNT(*) FROM posts WHERE status = 'pending'"),
+            pool.query("SELECT COUNT(*) FROM replies")
+        ]);
+
+        res.status(200).json({
+            totalUsers: parseInt(totalUsers.rows[0].count, 10),
+            newUsersToday: parseInt(newUsersToday.rows[0].count, 10),
+            approvedPosts: parseInt(approvedPosts.rows[0].count, 10),
+            pendingPosts: parseInt(pendingPosts.rows[0].count, 10),
+            totalReplies: parseInt(totalReplies.rows[0].count, 10)
+        });
+
+    } catch (err) {
+        console.error("İstatistikler getirilirken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu hatası.' });
+    }
+});
+
+
 // --- MODERASYON ROTALARI ---
 
 // Onay bekleyen konuları listele
@@ -199,5 +232,51 @@ router.delete('/replies/:id', [authenticateToken, authorizeAdmin], async (req, r
         res.status(500).json({ message: 'Sunucu hatası: Cevap silinemedi.' });
     }
 });
+
+// --- KULLANICI YÖNETİMİ ---
+
+// Tüm kullanıcıları listele
+router.get('/users', [authenticateToken, authorizeAdmin], async (req, res) => {
+    try {
+        const users = await pool.query('SELECT id, username, email, created_at, post_count, status FROM users ORDER BY created_at DESC');
+        res.status(200).json(users.rows);
+    } catch (err) {
+        console.error("Kullanıcılar getirilirken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu hatası.' });
+    }
+});
+
+// Kullanıcı durumunu güncelle (Askıya Al / Aktif Et)
+router.put('/users/:id/status', [authenticateToken, authorizeAdmin], async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        // Güvenlik: İzin verilen durumları kontrol et
+        const allowedStatus = ['active', 'suspended', 'banned'];
+        if (!allowedStatus.includes(status)) {
+            return res.status(400).json({ message: 'Geçersiz durum bilgisi.' });
+        }
+
+        const updatedUser = await pool.query(
+            'UPDATE users SET status = $1 WHERE id = $2 RETURNING id, username, status',
+            [status, id]
+        );
+
+        if (updatedUser.rows.length === 0) {
+            return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+        }
+
+        res.status(200).json({
+            message: `Kullanıcı durumu başarıyla '${status}' olarak güncellendi.`,
+            user: updatedUser.rows[0]
+        });
+
+    } catch (err) {
+        console.error("Kullanıcı durumu güncellenirken hata:", err.message);
+        res.status(500).json({ message: 'Sunucu hatası.' });
+    }
+});
+
 
 module.exports = router;

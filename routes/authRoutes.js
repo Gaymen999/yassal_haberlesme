@@ -74,16 +74,25 @@ router.post('/login', loginLimiter, async (req, res) => {
         if (user.rows.length === 0) {
             return res.status(400).json({ message: 'Hatalı giriş.' });
         }
+
+        // KULLANICI DURUM KONTROLÜ
+        const userData = user.rows[0];
+        if (userData.status === 'suspended') {
+            return res.status(403).json({ message: 'Hesabınız askıya alınmıştır. Lütfen bir yetkili ile iletişime geçin.' });
+        }
+        if (userData.status === 'banned') {
+            return res.status(403).json({ message: 'Hesabınız yasaklanmıştır.' });
+        }
         
-        const validPassword = await bcrypt.compare(password, user.rows[0].password);
+        const validPassword = await bcrypt.compare(password, userData.password);
         if (!validPassword) {
             return res.status(400).json({ message: 'Hatalı giriş.' });
         }
         
         const tokenPayload = {
-            id: user.rows[0].id, 
-            role: user.rows[0].role,
-            username: user.rows[0].username 
+            id: userData.id, 
+            role: userData.role,
+            username: userData.username 
         };
 
         const token = jwt.sign(
