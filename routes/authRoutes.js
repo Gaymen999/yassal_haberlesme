@@ -104,8 +104,9 @@ router.post('/login', loginLimiter, async (req, res) => {
         res.cookie('authToken', token, {
             httpOnly: true, 
             secure: process.env.NODE_ENV === 'production', 
+            sameSite: 'strict', // GÜVENLİK EKLEMESİ: CSRF koruması için önemli
             maxAge: 3600000,
-            path: '/' // <<< YENİ: Çerezi tüm site için ayarla
+            path: '/' 
         });
 
         res.json({ message: "Giriş başarılı." });
